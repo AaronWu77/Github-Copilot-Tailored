@@ -1,0 +1,14 @@
+{
+  "name": "usage-monitor-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local dashboard prototype for polling provider usage and balance APIs.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

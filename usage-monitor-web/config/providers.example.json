@@ -1,0 +1,70 @@
+{
+  "pollingIntervalMs": 60000,
+  "providers": [
+    {
+      "id": "deepseek",
+      "enabled": true,
+      "usageApi": {
+        "url": "",
+        "method": "GET",
+        "headers": {
+          "Authorization": "Bearer ${apiKey}"
+        }
+      },
+      "balanceApi": {
+        "url": "${baseUrl}/user/balance",
+        "method": "GET",
+        "headers": {
+          "Authorization": "Bearer ${apiKey}"
+        }
+      },
+      "parser": {
+        "usage": {
+          "totalTokensPath": "data.total_tokens",
+          "promptTokensPath": "data.prompt_tokens",
+          "completionTokensPath": "data.completion_tokens",
+          "requestCountPath": "data.request_count"
+        },
+        "balance": {
+          "availablePath": "is_available",
+          "currencyPath": "balance_infos.0.currency",
+          "totalBalancePath": "balance_infos.0.total_balance",
+          "grantedBalancePath": "balance_infos.0.granted_balance",
+          "toppedUpBalancePath": "balance_infos.0.topped_up_balance"
+        }
+      }
+    },
+    {
+      "id": "qwen",
+      "enabled": true,
+      "usageApi": {
+        "url": "",
+        "method": "GET",
+        "headers": {
+          "Authorization": "Bearer ${apiKey}"
+        }
+      },
+      "balanceApi": {
+        "url": "",
+        "method": "GET",
+        "headers": {
+          "Authorization": "Bearer ${apiKey}"
+        }
+      },
+      "parser": {
+        "usage": {
+          "totalTokensPath": "data.total_tokens",
+          "promptTokensPath": "data.prompt_tokens",
+          "completionTokensPath": "data.completion_tokens",
+          "requestCountPath": "data.request_count"
+        },
+        "balance": {
+          "remainingPath": "data.remaining",
+          "limitPath": "data.limit",
+          "spentPath": "data.spent",
+          "currencyPath": "data.currency"
+        }
+      }
+    }
+  ]
+}

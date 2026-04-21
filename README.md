@@ -330,3 +330,59 @@ copilot-qwen
 - 用两个终端切换或同时运行
 
 这样就能在 Windows、Mac、Linux 上都用同样的思路把 DeepSeek 和 Qwen 配好。
+
+---
+
+## 可选扩展：本地 token / 额度监控原型
+
+仓库里现在额外提供了一个**独立原型**：`usage-monitor-web/`
+
+这个原型的目标是：
+
+- 不改现有 `copilot-deepseek` / `copilot-qwen` 的使用方式
+- 不接管真实请求转发
+- 先单独轮询 provider 的 usage / billing / quota 接口
+- 在本地网页里展示 token、累计消耗、额度余额等信息
+
+### 适合什么场景
+
+如果你已经完成了 DeepSeek / Qwen 的接入，现在想继续验证：
+
+- 平台是否提供可用的 usage / billing API
+- 能否先做出一个不会影响现有部署流程的监控工具
+
+那么可以先试这个原型。
+
+### 启动方式
+
+```powershell
+Set-Location .\usage-monitor-web
+npm start
+```
+
+默认访问：
+
+```text
+http://127.0.0.1:4173
+```
+
+### 配置方式
+
+保留你现有的：
+
+- `~/.copilot/deepseek.env`
+- `~/.copilot/qwen.env`
+
+然后复制示例配置：
+
+```powershell
+Copy-Item .\config\providers.example.json .\config\providers.local.json
+```
+
+再按 provider 文档填写：
+
+- `usageApi.url`
+- `balanceApi.url`
+- `parser.*Path`
+
+> 说明：`providers.local.json` 已加入 `.gitignore`，适合保留本地私有接口配置，不会影响仓库当前已有的 API 配置教程。
