@@ -56,7 +56,7 @@ COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=4096
 '@ | Set-Content -Encoding UTF8 "$HOME\.copilot\deepseek.env"
 ```
 
-### Mac（zsh / bash）已验证
+### Mac（zsh / bash）
 
 ```bash
 cat > ~/.copilot/deepseek.env <<'EOF'
@@ -209,7 +209,7 @@ copilot
 '@ | Set-Content -Encoding UTF8 "$HOME\bin\copilot-qwen.ps1"
 ```
 
-### Mac（zsh / bash）已验证
+### Mac（zsh / bash）
 
 ```bash
 cat > ~/bin/copilot-qwen <<'EOF'
