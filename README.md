@@ -1,7 +1,9 @@
-# GitHub Copilot CLI 双模型配置教程（Windows / Mac / Linux）
+# GitHub Copilot CLI API配置教程（Windows / Mac / Linux）
+---
 
-这是一份一步一步的教程，目标是在本地同时配置两套 Copilot CLI 模型：
+这份教程，目标是在本地把自己的API模型配置到 Copilot CLI 中：
 
+本教程以下面两个公司的产品为例
 - DeepSeek
 - Qwen
 
@@ -18,20 +20,20 @@
 
 ## 第 1 步：准备目录
 
-### Windows（PowerShell）
+### Windows（PowerShell）已验证
 
 ```powershell
 New-Item -ItemType Directory -Force "$HOME\.copilot" | Out-Null
 New-Item -ItemType Directory -Force "$HOME\bin" | Out-Null
 ```
 
-### Mac（zsh / bash）
+### Mac（zsh / bash）已验证
 
 ```bash
 mkdir -p ~/.copilot ~/bin
 ```
 
-### Linux（bash / zsh）
+### Linux（bash / zsh）未验证
 
 ```bash
 mkdir -p ~/.copilot ~/bin
@@ -54,7 +56,7 @@ COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=4096
 '@ | Set-Content -Encoding UTF8 "$HOME\.copilot\deepseek.env"
 ```
 
-### Mac（zsh / bash）
+### Mac（zsh / bash）已验证
 
 ```bash
 cat > ~/.copilot/deepseek.env <<'EOF'
@@ -88,6 +90,8 @@ EOF
 - `COPILOT_MODEL=deepseek-reasoner`：思考模式
 - `COPILOT_PROVIDER_MAX_PROMPT_TOKENS=128000`：上下文 128K
 - `COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=4096`：输出最大 4K
+- deepseek-reasoner 目前对应的应该就是 deepseek-v3.2 的 think-mode
+- deepseek-chat 目前前对应的就是 deepseek-v3.2 的 non-thinking mode
 
 > 如果 Copilot 提示 `Model ... is not in the built-in catalog`，通常不是错误，只是 Copilot 不认识这个模型名，不能自动推断 token 上限；手动配置即可。
 
@@ -162,7 +166,7 @@ copilot
 
 > 如果你更想简单一点，也可以直接在 PowerShell 里手动 `export` 环境变量后运行 `copilot`，但脚本更适合长期使用。
 
-### Mac（zsh / bash）
+### Mac（zsh / bash）已验证
 
 ```bash
 cat > ~/bin/copilot-deepseek <<'EOF'
@@ -205,7 +209,7 @@ copilot
 '@ | Set-Content -Encoding UTF8 "$HOME\bin\copilot-qwen.ps1"
 ```
 
-### Mac（zsh / bash）
+### Mac（zsh / bash）已验证
 
 ```bash
 cat > ~/bin/copilot-qwen <<'EOF'
@@ -271,15 +275,10 @@ source ~/.bashrc
 
 ```powershell
 & "$HOME\bin\copilot-deepseek.ps1"
-```
-
-使用 Qwen：
-
-```powershell
 & "$HOME\bin\copilot-qwen.ps1"
 ```
 
-### Mac（zsh / bash）
+### Mac（zsh / bash）已验证
 
 ```bash
 copilot-deepseek
@@ -295,95 +294,9 @@ copilot-qwen
 
 ---
 
-## 第 8 步：验证是否生效
+## 第 8 步：常见问题处理
 
-### Windows（PowerShell）
-
-```powershell
-Get-Content "$HOME\.copilot\deepseek.env"
-Get-Content "$HOME\.copilot\qwen.env"
-```
-
-### Mac（zsh / bash）
-
-```bash
-cat ~/.copilot/deepseek.env
-cat ~/.copilot/qwen.env
-```
-
-### Linux（bash / zsh）
-
-```bash
-cat ~/.copilot/deepseek.env
-cat ~/.copilot/qwen.env
-```
-
-如果你看到类似下面的提示：
-
-- `Model ... is not in the built-in catalog`
-
-这通常只是 Copilot 不认识你的模型名，不是致命错误。  
-如果能进入 Copilot 并正常对话，说明基本配置是可用的。
-
----
-
-## 第 9 步：常见问题处理
-
-### 9.1 改了 `.env` 但还是旧模型
-
-先搜索是否还有别处写着旧模型：
-
-### Windows（PowerShell）
-
-```powershell
-Select-String -Path "$HOME\.copilot\*" -Pattern "deepseek-reasoner|qwen3.6-plus" -SimpleMatch
-```
-
-### Mac（zsh / bash）
-
-```bash
-grep -R "deepseek-reasoner\|qwen3.6-plus" ~/.copilot ~/.zshrc ~/bin 2>/dev/null
-```
-
-### Linux（bash / zsh）
-
-```bash
-grep -R "deepseek-reasoner\|qwen3.6-plus" ~/.copilot ~/.bashrc ~/.zshrc ~/bin 2>/dev/null
-```
-
-然后确认：
-
-- 当前终端是新开的
-- 脚本读取的是正确的 `.env`
-- 没有在别处 `export COPILOT_MODEL=...`
-
-### 9.2 `chmod: No such file or directory`
-
-这说明脚本还没创建，先执行创建脚本命令，再 `chmod`。
-
-### 9.3 Windows 脚本被执行策略拦截
-
-如果 PowerShell 提示脚本无法运行，可以执行：
-
-### Windows（PowerShell）
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-### Mac（zsh / bash）
-
-```bash
-echo "Mac 不需要这个设置"
-```
-
-### Linux（bash / zsh）
-
-```bash
-echo "Linux 不需要这个设置"
-```
-
-### 9.4 想更改上下文或输出长度
+### 8.1 想更改上下文或输出长度
 
 只需要修改对应的两个值：
 
@@ -397,7 +310,7 @@ echo "Linux 不需要这个设置"
 
 ---
 
-## 第 10 步：最终建议
+## 第 9 步：最终建议
 
 1. 不要把 API Key 写进脚本
 2. `.env` 只保存环境变量
