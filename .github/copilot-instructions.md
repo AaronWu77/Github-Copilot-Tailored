@@ -1,46 +1,34 @@
-# Copilot Instructions
+# Copilot Instructions (2026-04)
 
-## Build, test, and lint commands
+## 项目核心说明
 
-The repository root still does not define a single global build, test, or lint workflow. There is no root package manifest, Makefile, CI workflow, or automated test suite, so there is also no root-level single-test command.
+本仓库用于在本地通过 OpenAI-compatible API（如 DeepSeek、Qwen）配置 Copilot CLI，支持多平台（Windows/Mac/Linux）一键切换。
 
-The only runnable artifacts checked into the repository are the two provider launcher examples:
+- 每个 provider 独立配置（.env 文件）和独立启动脚本，互不干扰。
+- 不在仓库存储密钥，所有敏感信息仅保存在用户本地 `~/.copilot/*.env`。
+- 启动脚本极简：只加载对应 .env 并 exec copilot，不做多余逻辑。
+- 文档和脚本保持同步，README.md 为权威配置说明。
 
-- `zsh ./copilot-deepseek.sh`
-- `zsh ./copilot-qwen.sh`
+## 主要目录结构
 
-Those scripts are thin wrappers that load a provider-specific env file from the user's home directory and then `exec copilot`. The README's main supported workflow is to install equivalent launcher scripts into `$HOME/bin` or `~/bin` rather than running the repo copy directly.
+- `copilot-deepseek.sh` / `copilot-qwen.sh`：Unix-like 启动脚本范例
+- `usage-monitor-web/`：本地用量监控原型，完全独立于主流程
 
-There is also an isolated prototype app under `usage-monitor-web/`:
+## 快速使用流程
 
-- `Set-Location .\usage-monitor-web; npm start`
-- `Set-Location .\usage-monitor-web; npm run dev`
-- `Set-Location .\usage-monitor-web; node --check .\src\config.js`
-- `Set-Location .\usage-monitor-web; node --check .\src\collector.js`
-- `Set-Location .\usage-monitor-web; node --check .\src\server.js`
+1. 按 README.md 指引，分别为 DeepSeek/Qwen 创建 .env 文件（含 API Key、Base URL、Model 等）。
+2. 按平台生成对应启动脚本（Windows PowerShell、Mac/Linux zsh/bash）。
+3. 将脚本目录加入 PATH，直接用 `copilot-deepseek` 或 `copilot-qwen` 启动。
+4. 可用 usage-monitor-web/ 查看本地 token 用量、余额等信息，无需改动主流程。
 
-This subproject currently has no automated test suite, so there is no single-test command there yet.
+## 关键约定
 
-## High-level architecture
+- provider 名称、脚本、.env 文件一一对应，互不混用。
+- 不在仓库内存储任何密钥或用户配置。
+- usage-monitor-web/ 仅为可选工具，不影响主流程。
+- 任何平台下均可用同一思路配置和切换。
 
-The README is the primary source of truth for this project. Most of the actual behavior and supported setup lives in `README.md`, not in application code.
+## 参考
 
-The repository models a three-layer setup:
-
-1. Provider-specific env files outside the repo (`$HOME\.copilot\deepseek.env`, `$HOME\.copilot\qwen.env` on Windows; `~/.copilot/*.env` on Unix-like systems)
-2. Provider-specific launcher scripts (`copilot-deepseek`, `copilot-qwen`)
-3. The `copilot` CLI process started after those environment variables are loaded
-
-The checked-in shell scripts are reference implementations of layer 2 for Unix-like shells. Windows support is documented in `README.md` through PowerShell snippets that generate `copilot-deepseek.ps1` and `copilot-qwen.ps1` in the user's `$HOME\bin` directory.
-
-The new `usage-monitor-web/` directory is intentionally isolated from that flow. It is a local monitoring prototype that reads the existing provider env files but does not modify launcher behavior or proxy requests.
-
-## Key conventions
-
-- Keep each provider fully isolated by name across env files, launcher filenames, and commands. `deepseek` and `qwen` are treated as separate configurations, not flags inside one shared script.
-- Do not store API keys or user-specific provider settings in the repository. Secrets belong only in the user-local `~/.copilot/*.env` files described in the README.
-- Launcher scripts should stay minimal: export variables from one provider-specific env file, then immediately `exec copilot`. Do not add provider logic, prompts, or fallback behavior to these wrappers.
-- Use the exact `COPILOT_PROVIDER_*` and `COPILOT_MODEL` variable names shown in the README. The documentation assumes OpenAI-compatible provider configuration via environment variables.
-- Keep the checked-in launcher examples synchronized with the commands documented in `README.md`. In this repository, doc changes and script changes are tightly coupled.
-- `README.md` is written in Chinese and contains the validated platform-specific setup steps. When updating setup guidance, preserve the platform split already used there: Windows PowerShell, Mac zsh/bash, and Linux bash/zsh.
-- Treat `usage-monitor-web/` as an optional companion tool. It should stay decoupled from the core provider-switching setup and must not require changes to `copilot-deepseek.sh`, `copilot-qwen.sh`, or the existing `~/.copilot/*.env` workflow.
+- 详细平台配置、常见问题、usage-monitor-web 用法请见 README.md。
+- 如需更新脚本或文档，务必保持两者同步。

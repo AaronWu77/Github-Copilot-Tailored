@@ -343,6 +343,7 @@ copilot-qwen
 - 不接管真实请求转发
 - 先单独轮询 provider 的 usage / billing / quota 接口
 - 在本地网页里展示 token、累计消耗、额度余额等信息
+- Qwen 侧优先走百炼控制台页面抓取；登录态不足时可在本地配置里补 Cookie 或改接内部数据源
 
 ### 适合什么场景
 

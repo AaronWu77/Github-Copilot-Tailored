@@ -2,7 +2,7 @@
 
 `usage-monitor-web` 是这个仓库里的一个**独立监控原型**。它不会替换你现在的 DeepSeek / Qwen 启动方式，而是在**不影响现有 API 部署和切换流程**的前提下，额外提供一个本地网页面板。
 
-当前版本已经优先接入 **DeepSeek 官方余额接口**：
+当前版本已经优先接入 **DeepSeek 官方余额接口**，同时补上了 **Qwen 百炼控制台的 RPC 抓取能力**：
 
 - 文档页：`https://api-docs.deepseek.com/zh-cn/api/get-user-balance`
 - 方法：`GET`
@@ -14,6 +14,9 @@
 - `total_balance`
 - `granted_balance`
 - `topped_up_balance`
+- HTML / JSON 两种响应模式
+- Qwen 的 `ListBillingQuotas` RPC 直连
+- 登录页检测与提示
 
 ---
 
@@ -23,23 +26,29 @@
 
 - 自动读取 `~/.copilot/deepseek.env`
 - 自动读取 `~/.copilot/qwen.env`
+- 会先识别当前系统是 Windows 还是 Mac，再决定使用哪种默认路径写法
 - 自动识别：
   - `COPILOT_PROVIDER_BASE_URL`
   - `COPILOT_PROVIDER_API_KEY`
   - `COPILOT_MODEL`
+- 如果是 Qwen，还会读取 `COPILOT_QWEN_COOKIE` / `COPILOT_PROVIDER_COOKIE`
 - 对 DeepSeek 默认调用官方余额接口
+- 对 Qwen 默认使用百炼控制台 RPC 作为抓取源
 - 在页面展示：
   - 可用状态
   - 币种
   - 总余额
   - 赠金余额
   - 充值余额
+  - Usage 来源
+  - Balance 来源
+  - Usage 基础指标
   - 接口状态
   - 最近检查时间
 
 当前版本**还不支持**：
 
-- DeepSeek token usage 统计接口
+- 直接解析 Qwen 控制台里的所有列表型 UI
 - 历史图表
 - SQLite 持久化
 - 桌面应用打包
@@ -53,7 +62,7 @@
 1. 已经配置好了 DeepSeek API
 2. 不想改现有 `copilot-deepseek.sh` / `copilot-qwen.sh`
 3. 想先把 **DeepSeek 余额监控**做出来
-4. 想先验证官方接口能不能直接用
+4. 想用 **Qwen 百炼控制台 RPC** 做余额或用量采集
 
 ---
 
@@ -181,6 +190,85 @@ Copy-Item .\config\providers.example.json .\config\providers.local.json
 }
 ```
 
+Qwen 部分建议写成：
+
+```json
+{
+  "id": "qwen",
+  "enabled": true,
+  "workspaceId": "cn-beijing",
+  "region": "cn-beijing",
+  "collina": "",
+  "usageApi": {
+    "preflightUrl": "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/usage-statistics",
+    "url": "https://bailian.console.aliyun.com/data/api.json",
+    "method": "POST",
+    "responseType": "json",
+    "bodyType": "form",
+    "form": {
+      "action": "ListBillingQuotas",
+      "product": "bailian",
+      "params": {
+        "WorkspaceId": "${workspaceId}"
+      },
+      "sec_token": "${secToken}",
+      "umid": "${umid}",
+      "region": "${region}",
+      "collina": "${collina}"
+    },
+    "headers": {
+      "Cookie": "${sessionCookie}",
+      "User-Agent": "${userAgent}",
+      "Referer": "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/usage-statistics",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      "Source": "bailian"
+    }
+  },
+  "balanceApi": {
+    "preflightUrl": "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/free-quota",
+    "url": "https://bailian.console.aliyun.com/data/api.json",
+    "method": "POST",
+    "responseType": "json",
+    "bodyType": "form",
+    "form": {
+      "action": "ListBillingQuotas",
+      "product": "bailian",
+      "params": {
+        "WorkspaceId": "${workspaceId}"
+      },
+      "sec_token": "${secToken}",
+      "umid": "${umid}",
+      "region": "${region}",
+      "collina": "${collina}"
+    },
+    "headers": {
+      "Cookie": "${sessionCookie}",
+      "User-Agent": "${userAgent}",
+      "Referer": "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/free-quota",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      "Source": "bailian"
+    }
+  },
+  "parser": {
+    "usage": {
+      "totalTokensPath": "data.BillingQuotas",
+      "promptTokensPath": "data.BillingQuotas",
+      "completionTokensPath": "data.BillingQuotas",
+      "requestCountPath": "data.BillingQuotas"
+    },
+    "balance": {
+      "availablePath": "data.IsCDTLocked",
+      "currencyPath": "data.BillingQuotas.0.QuotaUnit",
+      "totalBalancePath": "data.BillingQuotas.0.QuotaValue",
+      "grantedBalancePath": "data.BillingQuotas.0.UsedQuotaValue",
+      "toppedUpBalancePath": "data.BillingQuotas.0.QuotaValue"
+    }
+  }
+}
+```
+
+> `collina` 对应浏览器里 `aliyunbuy_uadata` / `RISK_INFO.GETUA()` 生成的风控值；如果不填，接口可能仍然只返回错误码或空值。
+
 ---
 
 ## 7. 页面上每个余额字段是什么意思
@@ -240,6 +328,9 @@ Copy-Item .\config\providers.example.json .\config\providers.local.json
 
 如果没找到，也不影响 DeepSeek 默认余额接口生效，因为它已经内置在程序里。
 
+> 平台说明：程序会先判断当前系统是否为 Windows / Mac，再选择 provider `.env` 的默认路径写法。  
+> 在 Windows 上会优先使用 `$HOME\\.copilot\\deepseek.env`、`$HOME\\.copilot\\qwen.env`；在 Mac 上会优先使用 `~/.copilot/deepseek.env`、`~/.copilot/qwen.env`。
+
 ---
 
 ## 9. 常见问题排查
@@ -265,12 +356,16 @@ COPILOT_PROVIDER_BASE_URL=https://api.deepseek.com/v1
 1. API Key 无效
 2. 网络请求被拦截
 3. 返回结构发生变化
+4. Cookie 失效或页面需要重新登录
+5. 页面已打开，但脚本里的接口入口没有被当前规则识别到
 
 ### 9.3 为什么页面里 Qwen 还是没有余额
 
-因为当前这版计划已经收窄为：**先只围绕 DeepSeek 查询余额接口实现**。
+Qwen 的控制台 RPC 仍然需要登录态和页面风控值；如果你没有在本地配置里提供可访问会话的 Cookie，请先在浏览器里手动登录阿里云，然后把登录后的 Cookie 复制到 `~/.copilot/qwen.env` 的 `COPILOT_QWEN_COOKIE`，再把 `aliyunbuy_uadata` / `collina` 填到 `COPILOT_QWEN_COLLINA`。如果现在显示 `需登录`，说明 Cookie 已失效、权限不够，或者 `collina` 还没补上。
 
-Qwen 仍然保留在页面里，但默认没有接入官方余额接口。
+Qwen 现在默认优先走百炼控制台的 `ListBillingQuotas` RPC；如果它返回登录页或权限错误，就先检查本地 Cookie 是否仍然有效。
+
+如果页面直接提示“系统繁忙，请刷新页面重试”，那说明当前控制台页面态还没准备好数据，不是前端把 cookie 解析坏了，刷新后再抓即可。
 
 ---
 
@@ -281,19 +376,42 @@ Qwen 仍然保留在页面里，但默认没有接入官方余额接口。
 - 不改已有 provider env 文件结构
 - 不改已有启动脚本
 - 不劫持真实请求
-- 不引入网页抓取
-- 先只优先实现 DeepSeek 官方余额接口
+- 支持网页抓取，但必须由本地配置提供可访问的数据源
+- 先优先实现 DeepSeek 官方余额接口和 Qwen 页面抓取骨架
+- 遇到手机验证码时，由用户手动完成登录，程序只复用登录后的 session/cookie
 
 ---
 
 ## 11. 下一步最重要的事情
 
-当前最重要的下一步不是继续发散架构，而是：
+当前最重要的下一步是：
 
 1. 确认 DeepSeek 余额接口持续可用
-2. 继续找 DeepSeek 官方 usage/token 统计接口
-3. 再决定是否扩展到 Qwen 或网页抓取 fallback
+2. 补齐 Qwen 页面抓取的本地配置
+3. 再决定是否把 Qwen usage 接到控制台监控或 Prometheus 数据源
 
 现在这版的目标很明确：
 
-**先把 DeepSeek 余额监控稳定跑起来。**
+**把 DeepSeek 和 Qwen 的页面/接口采集入口都先打通。**
+
+---
+
+## 12. Qwen 页面抓取怎么配
+
+Qwen 的余额和用量主要来自阿里云百炼控制台的控制台 RPC，不是公开的匿名 API。当前原型已经支持：
+
+- 在 `providers.local.json` 里配置 `workspaceId`、`region`、`collina` 和 `responseType: "json"`
+- 让服务器端先抓 `usage-statistics` / `free-quota` 页面，再直连百炼控制台的 `ListBillingQuotas` RPC
+- 用 `parser` 里的 `*Path` 汇总 `BillingQuotas`
+- 如果页面需要验证码登录，先在浏览器手动完成登录，再把 Cookie 放进本地配置；程序不会替你输入账号密码或验证码
+
+如果你要抓 Qwen 免费额度，推荐先从：
+
+- `https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/free-quota`
+
+如果你要抓 Qwen 用量，推荐先从：
+
+- `https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/usage-statistics`
+- `https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-telemetry`
+
+这两个页面一般都需要登录态；如果本地抓取返回登录页，请在本地配置里补充能访问页面的 Cookie，或者改用你能访问的内部数据源。

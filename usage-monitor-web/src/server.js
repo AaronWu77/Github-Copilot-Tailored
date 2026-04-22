@@ -78,6 +78,8 @@ const server = http.createServer(async (request, response) => {
       pollingIntervalMs: config.pollingIntervalMs,
       configPath: config.configPath,
       candidatePaths: config.candidatePaths,
+      platformFamily: config.platformFamily,
+      platformLabel: config.platformLabel,
       providers: config.providers.map((provider) => sanitizeProvider(provider))
     });
     return;

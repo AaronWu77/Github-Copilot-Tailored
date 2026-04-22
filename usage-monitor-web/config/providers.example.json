@@ -37,32 +37,73 @@
     {
       "id": "qwen",
       "enabled": true,
+      "workspaceId": "cn-beijing",
+      "region": "cn-beijing",
+      "collina": "",
       "usageApi": {
-        "url": "",
-        "method": "GET",
+        "preflightUrl": "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/usage-statistics",
+        "url": "https://bailian.console.aliyun.com/data/api.json",
+        "method": "POST",
+        "responseType": "json",
+        "bodyType": "form",
+        "form": {
+          "action": "ListBillingQuotas",
+          "product": "bailian",
+          "params": {
+            "WorkspaceId": "${workspaceId}"
+          },
+          "sec_token": "${secToken}",
+          "umid": "${umid}",
+          "region": "${region}",
+          "collina": "${collina}"
+        },
         "headers": {
-          "Authorization": "Bearer ${apiKey}"
+          "Cookie": "${sessionCookie}",
+          "User-Agent": "${userAgent}",
+          "Referer": "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/usage-statistics",
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          "Source": "bailian"
         }
       },
       "balanceApi": {
-        "url": "",
-        "method": "GET",
+        "preflightUrl": "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/free-quota",
+        "url": "https://bailian.console.aliyun.com/data/api.json",
+        "method": "POST",
+        "responseType": "json",
+        "bodyType": "form",
+        "form": {
+          "action": "ListBillingQuotas",
+          "product": "bailian",
+          "params": {
+            "WorkspaceId": "${workspaceId}"
+          },
+          "sec_token": "${secToken}",
+          "umid": "${umid}",
+          "region": "${region}",
+          "collina": "${collina}"
+        },
         "headers": {
-          "Authorization": "Bearer ${apiKey}"
+          "Cookie": "${sessionCookie}",
+          "User-Agent": "${userAgent}",
+          "Referer": "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/free-quota",
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          "Source": "bailian"
         }
       },
       "parser": {
         "usage": {
-          "totalTokensPath": "data.total_tokens",
-          "promptTokensPath": "data.prompt_tokens",
-          "completionTokensPath": "data.completion_tokens",
-          "requestCountPath": "data.request_count"
+          "totalTokensPath": "data.BillingQuotas",
+          "promptTokensPath": "data.BillingQuotas",
+          "completionTokensPath": "data.BillingQuotas",
+          "requestCountPath": "data.BillingQuotas",
+          "updatedAtPath": "data.EndDate"
         },
         "balance": {
-          "remainingPath": "data.remaining",
-          "limitPath": "data.limit",
-          "spentPath": "data.spent",
-          "currencyPath": "data.currency"
+          "availablePath": "data.IsCDTLocked",
+          "currencyPath": "data.BillingQuotas.0.QuotaUnit",
+          "totalBalancePath": "data.BillingQuotas.0.QuotaValue",
+          "grantedBalancePath": "data.BillingQuotas.0.UsedQuotaValue",
+          "toppedUpBalancePath": "data.BillingQuotas.0.QuotaValue"
         }
       }
     }

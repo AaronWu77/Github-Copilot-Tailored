@@ -63,6 +63,7 @@ body {
 h1,
 h2,
 h3,
+h4,
 p {
   margin-top: 0;
 }
@@ -155,6 +156,10 @@ button {
   color: var(--warn);
 }
 
+.status-chip[data-status="auth_required"] {
+  color: var(--warn);
+}
+
 .status-chip[data-status="needs_configuration"] {
   color: var(--pending);
 }
@@ -181,6 +186,12 @@ dt {
 dd {
   margin: 0;
   word-break: break-all;
+}
+
+h4 {
+  margin: 18px 0 12px;
+  font-size: 15px;
+  color: var(--text);
 }
 
 .message-block {
