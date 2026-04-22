@@ -1,13 +1,4 @@
 # GitHub Copilot CLI API配置教程（Windows / Mac / Linux）
-
-## 更新日志（维护在文档开头）
-
-- 当前更新次数：4
-- v4：usage-monitor-web 的 DeepSeek 面板改为 Usage-only，按当月 `get_user_summary/amount/cost` 重建余额与图表数据。
-- v3：usage-monitor-web 增加 DeepSeek Web Token 配置（`COPILOT_DEEPSEEK_WEB_TOKEN`），用于 usage 网页接口鉴权。
-- v2：usage-monitor-web 新增 DeepSeek usage 自动抓取与 `biz_data` 解析（兼容 get_usr_summary/amount/cost 等接口）。
-- v1：补充 usage-monitor-web DeepSeek Cookie 登录态说明与故障修复指引（默认请求头注入 Cookie、按 provider 区分提示文案）。
-
 ---
 
 这份教程，目标是在本地把自己的API模型配置到 Copilot CLI 中：
@@ -396,3 +387,67 @@ Copy-Item .\config\providers.example.json .\config\providers.local.json
 - `parser.*Path`
 
 > 说明：`providers.local.json` 已加入 `.gitignore`，适合保留本地私有接口配置，不会影响仓库当前已有的 API 配置教程。
+
+---
+
+## 附录：DeepSeek Usage 网页监控配置教程（usage-monitor-web）
+
+如果你要让 `usage-monitor-web` 正常读取 DeepSeek 网页 usage 数据（按月请求/Token 柱图），请按下面配置。
+
+### 1. 准备 `~/.copilot/deepseek.env`
+
+至少包含：
+
+```env
+COPILOT_PROVIDER_BASE_URL=https://api.deepseek.com/v1
+COPILOT_PROVIDER_API_KEY=你的DeepSeek API Key
+COPILOT_MODEL=deepseek-reasoner
+COPILOT_DEEPSEEK_COOKIE=你的网页登录Cookie
+COPILOT_DEEPSEEK_WEB_TOKEN=你的网页Bearer Token（不含 Bearer 前缀）
+```
+
+> 说明：DeepSeek usage 网页接口通常需要 **Cookie + Bearer Token** 双鉴权。
+
+### 2. 如何拿到 `COPILOT_DEEPSEEK_COOKIE`
+
+1. 浏览器打开并登录：`https://platform.deepseek.com/usage`
+2. 按 `F12` 打开开发者工具，进入 `Network`
+3. 任选一个同域请求（如 `get_user_summary`），在 `Request Headers` 找到 `Cookie`
+4. 复制整段 Cookie 值，写入：
+   - `COPILOT_DEEPSEEK_COOKIE=...`
+
+> 小技巧：也可以在浏览器 `Application/Storage -> Cookies -> https://platform.deepseek.com` 中复制拼接。
+
+### 3. 如何拿到 `COPILOT_DEEPSEEK_WEB_TOKEN`
+
+1. 浏览器打开并登录：`https://platform.deepseek.com/usage`
+2. 按 `F12` 打开开发者工具，进入 `Network`
+3. 点击任一请求（如 `get_user_summary` / `usage/amount` / `usage/cost`）
+4. 在 `Request Headers` 找到：
+   - `Authorization: Bearer xxxxx`
+5. 把 `xxxxx` 写到 `COPILOT_DEEPSEEK_WEB_TOKEN`
+
+### 4. 启动监控面板
+
+```powershell
+Set-Location .\usage-monitor-web
+npm start
+```
+
+打开：
+
+```text
+http://127.0.0.1:4173
+```
+
+### 5. 正常状态判断
+
+- DeepSeek 卡片 `Usage API` 状态为 `ok`
+- 页面显示本月完整日期（如 4/1~4/30）的请求数与 Token 柱图
+- 顶部显示：`Base URL / Env文件 / Usage来源 / 数据抓取时间`
+
+### 6. 常见问题
+
+- 显示 `Usage API 需要登录态`：检查 Cookie 是否过期、`COPILOT_DEEPSEEK_WEB_TOKEN` 是否为空或失效
+- 显示 `Authorization Failed` / `Missing Token`：通常是 Bearer Token 不正确或已过期
+- 修改 `.env` 后无变化：重启 `usage-monitor-web`

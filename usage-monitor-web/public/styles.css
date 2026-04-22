@@ -208,14 +208,12 @@ h4 {
   display: block;
 }
 
-.provider-card.is-deepseek .balance-title,
-.provider-card.is-deepseek .balance-section,
-.provider-card.is-deepseek .balance-message,
-.provider-card.is-deepseek .balance-details {
+.provider-card.is-deepseek .usage-basic-section {
   display: none;
 }
 
-.provider-card.is-deepseek .usage-basic-section {
+.provider-card.is-deepseek .usage-message,
+.provider-card.is-deepseek .usage-details {
   display: none;
 }
 
@@ -248,9 +246,12 @@ h4 {
 }
 
 .chart-bar {
+  display: block;
+  width: 0;
   height: 100%;
-  background: linear-gradient(135deg, #34d399, #3b82f6);
+  background: linear-gradient(135deg, #22c55e, #3b82f6);
   border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25) inset;
 }
 
 @media (max-width: 720px) {

@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { chromium } from "playwright";
 
 function getValueByPath(input, dottedPath) {
@@ -99,6 +103,252 @@ function buildFormBody(form, context) {
   }
 
   return new URLSearchParams(entries).toString();
+}
+
+function readCookieValue(cookie, key) {
+  if (!cookie || !key) {
+    return "";
+  }
+
+  const match = cookie.match(new RegExp(`(?:^|;\\s*)${key}=([^;]+)`));
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+function createTraceId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function resolveCopilotLogsDir(context) {
+  const configured = context.copilotLogsDir;
+  if (typeof configured === "string" && configured.trim()) {
+    if (configured.startsWith("~/")) {
+      return path.join(os.homedir(), configured.slice(2));
+    }
+    return configured;
+  }
+  return path.join(os.homedir(), ".copilot", "logs");
+}
+
+function resolveCopilotSessionStateDir(context) {
+  const configured = context.copilotSessionStateDir;
+  if (typeof configured === "string" && configured.trim()) {
+    if (configured.startsWith("~/")) {
+      return path.join(os.homedir(), configured.slice(2));
+    }
+    return configured;
+  }
+  return path.join(os.homedir(), ".copilot", "session-state");
+}
+
+function listModelSessionWindows(context, maxSessions = 8) {
+  const model = String(context.model ?? "").trim();
+  if (!model) {
+    return [];
+  }
+
+  const sessionDir = resolveCopilotSessionStateDir(context);
+  if (!fs.existsSync(sessionDir)) {
+    return [];
+  }
+
+  const windows = [];
+  for (const entry of fs.readdirSync(sessionDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const eventsPath = path.join(sessionDir, entry.name, "events.jsonl");
+    if (!fs.existsSync(eventsPath)) {
+      continue;
+    }
+
+    const lines = fs.readFileSync(eventsPath, "utf8").split(/\r?\n/).filter(Boolean);
+    if (lines.length === 0) {
+      continue;
+    }
+
+    let startEvent = null;
+    try {
+      startEvent = JSON.parse(lines[0]);
+    } catch {
+      continue;
+    }
+    if (startEvent?.type !== "session.start") {
+      continue;
+    }
+
+    const selectedModel = String(startEvent?.data?.selectedModel ?? "").trim();
+    if (selectedModel !== model) {
+      continue;
+    }
+
+    const startMs = new Date(startEvent?.data?.startTime ?? 0).getTime();
+    if (!Number.isFinite(startMs) || startMs <= 0) {
+      continue;
+    }
+
+    const stat = fs.statSync(eventsPath);
+    windows.push({
+      sessionId: startEvent?.data?.sessionId ?? entry.name,
+      startMs,
+      endMs: stat.mtimeMs
+    });
+  }
+
+  return windows.sort((a, b) => b.endMs - a.endMs).slice(0, maxSessions);
+}
+
+function listRecentCopilotProcessLogs(context, maxFiles = 5) {
+  const logsDir = resolveCopilotLogsDir(context);
+  if (!fs.existsSync(logsDir)) {
+    return [];
+  }
+
+  const files = fs
+    .readdirSync(logsDir)
+    .filter((name) => /^process-\d+-\d+\.log$/i.test(name))
+    .map((name) => {
+      const fullPath = path.join(logsDir, name);
+      const stat = fs.statSync(fullPath);
+      return {
+        name,
+        fullPath,
+        mtimeMs: stat.mtimeMs
+      };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  return files.slice(0, maxFiles);
+}
+
+function parseCopilotProcessUsage(logContent) {
+  const utilizationRows = [];
+  const requestRows = [];
+
+  for (const rawLine of logContent.split(/\r?\n/)) {
+    const utilizationMatch = rawLine.match(
+      /^(\d{4}-\d{2}-\d{2}T[^ ]+)\s+\[INFO\]\s+CompactionProcessor: Utilization [0-9.]+% \((\d+)\/(\d+) tokens\)/
+    );
+    if (utilizationMatch) {
+      utilizationRows.push({
+        timestamp: utilizationMatch[1],
+        usedTokens: Number(utilizationMatch[2]),
+        tokenLimit: Number(utilizationMatch[3])
+      });
+      continue;
+    }
+
+    const requestMatch = rawLine.match(
+      /^(\d{4}-\d{2}-\d{2}T[^ ]+)\s+\[INFO\]\s+--- Start of group: Sending request to the AI model ---/
+    );
+    if (requestMatch) {
+      requestRows.push({
+        timestamp: requestMatch[1]
+      });
+    }
+  }
+
+  return { utilizationRows, requestRows };
+}
+
+function collectCopilotLocalUsage(context, warnings) {
+  const logs = listRecentCopilotProcessLogs(context, 5);
+  if (logs.length === 0) {
+    return {
+      state: "error",
+      reason: "未找到 Copilot 本地日志，无法从 usage 估算会话消耗",
+      responseType: "local-log"
+    };
+  }
+
+  const entries = [];
+  const requestEntries = [];
+
+  for (const log of logs) {
+    const content = fs.readFileSync(log.fullPath, "utf8");
+    const parsed = parseCopilotProcessUsage(content);
+    for (const request of parsed.requestRows) {
+      requestEntries.push({
+        ...request,
+        sourceFile: log.fullPath
+      });
+    }
+    for (const row of parsed.utilizationRows) {
+      entries.push({
+        ...row,
+        sourceFile: log.fullPath
+      });
+    }
+  }
+
+  const windows = listModelSessionWindows(context, 8);
+  const withinWindows = (timestamp) => {
+    const ms = new Date(timestamp).getTime();
+    return windows.some((window) => ms >= window.startMs && ms <= window.endMs);
+  };
+
+  const filteredEntries = windows.length > 0 ? entries.filter((entry) => withinWindows(entry.timestamp)) : entries;
+  const filteredRequests = windows.length > 0
+    ? requestEntries.filter((entry) => withinWindows(entry.timestamp))
+    : requestEntries;
+
+  const usageEntries = filteredEntries.length >= 2 ? filteredEntries : entries;
+  const usageRequests = filteredEntries.length >= 2 ? filteredRequests : requestEntries;
+  if (windows.length > 0 && filteredEntries.length >= 2) {
+    warnings.push(`本地 usage 已按模型会话过滤（model=${context.model}，sessions=${windows.length}）`);
+  } else if (windows.length === 0) {
+    warnings.push(`本地 usage 未找到模型匹配会话（model=${context.model}），按最近日志估算`);
+  } else {
+    warnings.push("本地 usage 模型会话采样不足，已回退到最近日志估算");
+  }
+
+  usageEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  if (usageEntries.length < 2) {
+    return {
+      state: "error",
+      reason: "Copilot 本地日志中没有足够的 usage 采样点",
+      responseType: "local-log"
+    };
+  }
+
+  let consumed = 0;
+  for (let i = 1; i < usageEntries.length; i += 1) {
+    const delta = usageEntries[i].usedTokens - usageEntries[i - 1].usedTokens;
+    if (delta > 0) {
+      consumed += delta;
+    }
+  }
+
+  const requestCount = usageRequests.length;
+  const latest = usageEntries[usageEntries.length - 1];
+  const earliest = usageEntries[0];
+  warnings.push(`已降级为本地 usage 估算（来源：${path.basename(latest.sourceFile)}）`);
+
+  return {
+    state: "ok",
+    url: `file://${latest.sourceFile}`,
+    contentType: "text/plain",
+    responseType: "local-log",
+    metrics: {
+      totalTokens: consumed,
+      promptTokens: null,
+      completionTokens: null,
+      requestCount,
+      updatedAt: latest.timestamp,
+      local: {
+        summary: {
+          callSuccessCount: requestCount,
+          totalTokenAvg: requestCount > 0 ? Math.round(consumed / requestCount) : null,
+          localWindowStart: earliest.timestamp,
+          localWindowEnd: latest.timestamp,
+          localSessionMatched: windows.length > 0 && filteredEntries.length >= 2
+        }
+      }
+    }
+  };
 }
 
 function stripHtml(input) {
@@ -580,56 +830,10 @@ async function fetchResource(apiConfig, context, parser, kind) {
 
   if (apiConfig.preflightUrl) {
     const preflightUrl = applyTemplate(apiConfig.preflightUrl, resolvedContext);
-    if (context.providerId === "qwen") {
-      const renderedPage = await fetchRenderedPage(preflightUrl, resolvedContext);
-      if (renderedPage.secToken) {
-        resolvedContext.secToken = renderedPage.secToken;
-      }
-      if (renderedPage.umid) {
-        resolvedContext.umid = renderedPage.umid;
-      }
-
-      if (renderedPage.consoleState?.loginStatus === "NOT_LOGINED" || renderedPage.consoleState?.initSpaceError === "BailianGateway.Login.NotLogined") {
-        return {
-          state: "auth_required",
-          reason: "控制台 RPC 返回未登录",
-          url: renderedPage.url,
-          text: renderedPage.text
-        };
-      }
-
-      if (renderedPage.consoleState?.spaceInited === false) {
-        return {
-          state: "auth_required",
-          reason: "控制台空间尚未初始化或未登录",
-          url: renderedPage.url,
-          text: renderedPage.text
-        };
-      }
-
-      if (isBusyPage(renderedPage.text)) {
-        return {
-          state: "busy",
-          reason: "页面提示系统繁忙，请刷新页面重试",
-          url: renderedPage.url,
-          text: renderedPage.text
-        };
-      }
-
-      if (isPermissionPage(renderedPage.text) || isAuthPage(renderedPage.text)) {
-        return {
-          state: "auth_required",
-          reason: "页面提示需要登录或权限授权",
-          url: renderedPage.url,
-          text: renderedPage.text
-        };
-      }
-    } else {
-      const preflightHeaders = buildHeaders(apiConfig.headers, resolvedContext);
-      const preflightResult = await fetchText(preflightUrl, preflightHeaders);
-      if (preflightResult.ok && preflightResult.text) {
-        Object.assign(resolvedContext, extractConsoleTokens(preflightResult.text));
-      }
+    const preflightHeaders = buildHeaders(apiConfig.headers, resolvedContext);
+    const preflightResult = await fetchText(preflightUrl, preflightHeaders);
+    if (preflightResult.ok && preflightResult.text) {
+      Object.assign(resolvedContext, extractConsoleTokens(preflightResult.text));
     }
   }
 
@@ -1176,6 +1380,8 @@ function isDeepseekAuthFailure(payload) {
   return code === 40002 || code === 40003 || /Missing Token|Authorization Failed|Not Login/i.test(msg);
 }
 
+
+
 async function collectDeepseekUsage(provider, context, warnings) {
   const referer = provider?.usageApi?.url ?? "https://platform.deepseek.com/usage";
   const headers = {
@@ -1285,9 +1491,8 @@ export async function collectProviderSnapshot(provider) {
     sessionCookie: provider.sessionCookie,
     webToken: provider.webToken,
     userAgent: provider.userAgent,
-    workspaceId: provider.workspaceId,
-    region: provider.region ?? provider.workspaceId,
-    collina: provider.collina ?? "",
+    copilotLogsDir: provider.copilotLogsDir ?? "~/.copilot/logs",
+    copilotSessionStateDir: provider.copilotSessionStateDir ?? "~/.copilot/session-state",
     year: new Date().getFullYear(),
     month: new Date().getMonth() + 1
   };
@@ -1302,68 +1507,33 @@ export async function collectProviderSnapshot(provider) {
     warnings.push("未从 env 中读取到 API Key");
   }
 
-  if (provider.id === "qwen" && !provider.collina) {
-    warnings.push("Qwen collina 未配置");
-  }
-
   if (provider.id === "deepseek" && !provider.webToken) {
     warnings.push("DeepSeek usage 网页 token 未配置（可在 deepseek.env 设置 COPILOT_DEEPSEEK_WEB_TOKEN）");
   }
 
-  const [usageResult, balanceResult] = provider.id === "deepseek"
-    ? await Promise.all([
-        collectDeepseekUsage(provider, context, warnings).catch((error) => ({
-          state: "error",
-          reason: error.message
-        })),
-        Promise.resolve({
-          state: "skipped",
-          reason: "DeepSeek 已启用 usage-only 模式，不再采集 balance"
-        })
-      ])
-    : await Promise.all([
-        fetchResource(provider.usageApi, context, provider.parser?.usage, "usage").catch((error) => ({
-          state: "error",
-          reason: error.message
-        })),
-        fetchResource(provider.balanceApi, context, provider.parser?.balance, "balance").catch((error) => ({
-          state: "error",
-          reason: error.message
-        }))
-      ]);
+  const usageResult = provider.id === "deepseek"
+    ? await collectDeepseekUsage(provider, context, warnings).catch((error) => ({
+        state: "error",
+        reason: error.message
+      }))
+    : await fetchResource(provider.usageApi, context, provider.parser?.usage, "usage").catch((error) => ({
+        state: "error",
+        reason: error.message
+      }));
 
   let status = "ready";
 
-  if (provider.id === "deepseek") {
-    if (usageResult.state === "skipped") {
-      status = "needs_configuration";
-    } else if (usageResult.state === "busy") {
-      status = "busy";
-    } else if (usageResult.state === "auth_required") {
-      status = "auth_required";
-    } else if (usageResult.state === "error" || usageResult.state === "no_xhr_found") {
-      status = "partial";
-    } else {
-      status = "ready";
-    }
-  } else if (usageResult.state === "skipped" && balanceResult.state === "skipped") {
+  if (usageResult.state === "skipped") {
     status = "needs_configuration";
-  } else if (usageResult.state === "busy" || balanceResult.state === "busy") {
+  } else if (usageResult.state === "busy") {
     status = "busy";
-  } else if (usageResult.state === "auth_required" || balanceResult.state === "auth_required") {
+  } else if (usageResult.state === "auth_required") {
     status = "auth_required";
-  } else if (
-    usageResult.state === "error" ||
-    balanceResult.state === "error" ||
-    usageResult.state === "no_xhr_found" ||
-    balanceResult.state === "no_xhr_found"
-  ) {
+  } else if (usageResult.state === "error" || usageResult.state === "no_xhr_found") {
     status = "partial";
-  } else if (balanceResult.state === "ok" || usageResult.state === "ok") {
+  } else if (usageResult.state === "ok") {
     const usageHasMetrics = Boolean(usageResult.metrics && hasParsedValue(usageResult.metrics));
-    const balanceHasMetrics = Boolean(balanceResult.metrics && hasParsedValue(balanceResult.metrics));
-
-    status = usageHasMetrics && balanceHasMetrics ? "ready" : "partial";
+    status = usageHasMetrics ? "ready" : "partial";
   }
 
   return {
@@ -1377,22 +1547,13 @@ export async function collectProviderSnapshot(provider) {
     checkedAt: new Date().toISOString(),
     sources: {
       usage: {
-        preflightUrl: provider.usageApi?.preflightUrl ?? null,
+        preflightUrl: provider.usageApi?.preflightUrl ? applyTemplate(provider.usageApi.preflightUrl, context) : null,
         url: usageResult.url ?? null,
         contentType: usageResult.contentType ?? null,
-        responseType: provider.usageApi?.responseType ?? "json",
+        responseType: usageResult.responseType ?? provider.usageApi?.responseType ?? "json",
         authConfigured: Boolean(provider.sessionCookie || provider.webToken),
         discoveredFrom: usageResult.discoveredFrom ?? null,
         discoveryCandidates: usageResult.discoveryCandidates ?? []
-      },
-      balance: {
-        preflightUrl: provider.balanceApi?.preflightUrl ?? null,
-        url: balanceResult.url ?? null,
-        contentType: balanceResult.contentType ?? null,
-        responseType: provider.balanceApi?.responseType ?? "json",
-        authConfigured: Boolean(provider.sessionCookie || provider.webToken),
-        discoveredFrom: balanceResult.discoveredFrom ?? null,
-        discoveryCandidates: balanceResult.discoveryCandidates ?? []
       }
     },
     warnings,
@@ -1402,14 +1563,6 @@ export async function collectProviderSnapshot(provider) {
       authRequired: usageResult.state === "auth_required",
       metrics: usageResult.state === "ok"
         ? (usageResult.metrics ?? parseUsage(usageResult, provider.parser?.usage))
-        : null
-    },
-    balance: {
-      state: balanceResult.state,
-      error: balanceResult.reason ?? null,
-      authRequired: balanceResult.state === "auth_required",
-      metrics: balanceResult.state === "ok"
-        ? (balanceResult.metrics ?? parseBalance(balanceResult, provider.parser?.balance))
         : null
     }
   };

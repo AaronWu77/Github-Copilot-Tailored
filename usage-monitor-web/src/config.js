@@ -11,8 +11,7 @@ function getProviderEnvFile(providerId) {
 }
 
 const DEFAULT_PROVIDER_ENV_FILES = [
-  { id: "deepseek", name: "DeepSeek", envFile: getProviderEnvFile("deepseek") },
-  { id: "qwen", name: "Qwen", envFile: getProviderEnvFile("qwen") }
+  { id: "deepseek", name: "DeepSeek", envFile: getProviderEnvFile("deepseek") }
 ];
 
 function getDefaultProviderConfig(providerId) {
@@ -44,79 +43,6 @@ function getDefaultProviderConfig(providerId) {
           requestCountPath: "data.biz_data.current_token"
         },
         balance: {}
-      }
-    };
-  }
-
-  if (providerId === "qwen") {
-    return {
-      workspaceId: "cn-beijing",
-      region: "cn-beijing",
-      usageApi: {
-        preflightUrl: "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/usage-statistics",
-        url: "https://bailian.console.aliyun.com/data/api.json",
-        method: "POST",
-        responseType: "json",
-        bodyType: "form",
-        form: {
-          action: "ListBillingQuotas",
-          product: "bailian",
-          params: {
-            WorkspaceId: "${workspaceId}"
-          },
-          sec_token: "${secToken}",
-          umid: "${umid}",
-          region: "${region}",
-          collina: "${collina}"
-        },
-        headers: {
-          Cookie: "${sessionCookie}",
-          "User-Agent": "${userAgent}",
-          Referer: "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/usage-statistics",
-          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-          Source: "bailian"
-        }
-      },
-      balanceApi: {
-        preflightUrl: "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/free-quota",
-        url: "https://bailian.console.aliyun.com/data/api.json",
-        method: "POST",
-        responseType: "json",
-        bodyType: "form",
-        form: {
-          action: "ListBillingQuotas",
-          product: "bailian",
-          params: {
-            WorkspaceId: "${workspaceId}"
-          },
-          sec_token: "${secToken}",
-          umid: "${umid}",
-          region: "${region}",
-          collina: "${collina}"
-        },
-        headers: {
-          Cookie: "${sessionCookie}",
-          "User-Agent": "${userAgent}",
-          Referer: "https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-usage/free-quota",
-          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-          Source: "bailian"
-        }
-      },
-      parser: {
-        usage: {
-          totalTokensPath: "data.BillingQuotas",
-          promptTokensPath: "data.BillingQuotas",
-          completionTokensPath: "data.BillingQuotas",
-          requestCountPath: "data.BillingQuotas",
-          updatedAtPath: "data.EndDate"
-        },
-        balance: {
-          availablePath: "data.IsCDTLocked",
-          currencyPath: "data.BillingQuotas.0.QuotaUnit",
-          totalBalancePath: "data.BillingQuotas.0.QuotaValue",
-          grantedBalancePath: "data.BillingQuotas.0.UsedQuotaValue",
-          toppedUpBalancePath: "data.BillingQuotas.0.QuotaValue"
-        }
       }
     };
   }
@@ -348,10 +274,8 @@ export function loadMonitorConfig(projectRoot) {
     const envSource = readEnvFile(configProvider?.envFile ?? baseProvider.envFile);
     const envValues = envSource?.values ?? {};
     const defaultConfig = getDefaultProviderConfig(baseProvider.id);
-    const sessionCookie = baseProvider.id === "deepseek"
-      ? envValues.COPILOT_DEEPSEEK_COOKIE ?? envValues.COPILOT_PROVIDER_COOKIE ?? ""
-      : envValues.COPILOT_QWEN_COOKIE ?? envValues.COPILOT_PROVIDER_COOKIE ?? "";
-    const webToken = baseProvider.id === "deepseek" ? getDeepseekWebToken(envValues, sessionCookie) : "";
+    const sessionCookie = envValues.COPILOT_DEEPSEEK_COOKIE ?? envValues.COPILOT_PROVIDER_COOKIE ?? "";
+    const webToken = getDeepseekWebToken(envValues, sessionCookie);
 
     mergedProviders.push(
       mergeProvider(
@@ -367,9 +291,6 @@ export function loadMonitorConfig(projectRoot) {
           sessionCookie,
           webToken,
           userAgent: envValues.COPILOT_PROVIDER_USER_AGENT ?? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          workspaceId: envValues.COPILOT_QWEN_WORKSPACE_ID ?? envValues.COPILOT_PROVIDER_WORKSPACE_ID ?? readCookieValue(sessionCookie, "currentRegionId") ?? (baseProvider.id === "qwen" ? "cn-beijing" : ""),
-          region: envValues.COPILOT_QWEN_REGION ?? envValues.COPILOT_PROVIDER_REGION ?? readCookieValue(sessionCookie, "currentRegionId") ?? (baseProvider.id === "qwen" ? "cn-beijing" : ""),
-          collina: envValues.COPILOT_QWEN_COLLINA ?? envValues.COPILOT_PROVIDER_COLLINA ?? "",
           usageApi: defaultConfig.usageApi,
           balanceApi: defaultConfig.balanceApi,
           parser: {

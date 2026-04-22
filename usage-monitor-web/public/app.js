@@ -19,34 +19,6 @@ function formatNumber(value, digits = 0) {
   return num.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-function formatBooleanValue(value) {
-  if (value === true) {
-    return "可用";
-  }
-
-  if (value === false) {
-    return "不可用";
-  }
-
-  return "-";
-}
-
-function formatBalanceDetails(balanceInfos) {
-  if (!Array.isArray(balanceInfos) || balanceInfos.length === 0) {
-    return "当前接口未返回更多余额明细。";
-  }
-
-  return balanceInfos
-    .map((item) => {
-      const currency = item.currency ?? "-";
-      const total = item.totalBalance ?? "-";
-      const granted = item.grantedBalance ?? "-";
-      const toppedUp = item.toppedUpBalance ?? "-";
-      return `${currency}: 总余额 ${total}, 赠金 ${granted}, 充值 ${toppedUp}`;
-    })
-    .join(" | ");
-}
-
 function formatSource(source) {
   if (!source?.url) {
     return "未配置";
@@ -129,7 +101,7 @@ function renderProviderCard(provider) {
   fragment.querySelector(".provider-base-url").textContent = provider.baseUrl || "未读取到 base_url";
   fragment.querySelector(".provider-env-file").textContent = provider.envFile || "未找到";
   fragment.querySelector(".provider-source-usage").textContent = formatSource(provider.sources?.usage);
-  fragment.querySelector(".provider-source-balance").textContent = formatSource(provider.sources?.balance);
+  fragment.querySelector(".provider-checked-at").textContent = formatValue(provider.checkedAt);
 
   const chip = fragment.querySelector(".status-chip");
   chip.textContent = statusLabel(provider.status);
@@ -141,41 +113,6 @@ function renderProviderCard(provider) {
   fragment.querySelector(".metric-usage-request-count").textContent = formatValue(provider.usage?.metrics?.requestCount);
   fragment.querySelector(".metric-usage-updated-at").textContent = formatValue(provider.usage?.metrics?.updatedAt);
 
-  fragment.querySelector(".metric-balance-available").textContent = formatBooleanValue(provider.balance?.metrics?.available);
-  fragment.querySelector(".metric-balance-currency").textContent = formatValue(provider.balance?.metrics?.currency);
-  fragment.querySelector(".metric-balance-total").textContent = formatValue(provider.balance?.metrics?.totalBalance);
-  fragment.querySelector(".metric-balance-granted").textContent = formatValue(provider.balance?.metrics?.grantedBalance);
-  fragment.querySelector(".metric-balance-topped-up").textContent = formatValue(provider.balance?.metrics?.toppedUpBalance);
-  fragment.querySelector(".metric-balance-entry-count").textContent = formatValue(provider.balance?.metrics?.balanceInfoCount);
-  fragment.querySelector(".metric-balance-checked-at").textContent = formatValue(provider.checkedAt);
-
-  const balanceMessage = fragment.querySelector(".balance-message");
-  const balanceDetails = fragment.querySelector(".balance-details");
-
-  if (provider.balance?.state === "ok") {
-    balanceMessage.textContent = `Balance API 已返回数据，最近检查时间：${provider.checkedAt}`;
-    balanceDetails.textContent = `余额明细：${formatBalanceDetails(provider.balance?.metrics?.balanceInfos)}`;
-  } else if (provider.balance?.state === "auth_required") {
-    balanceMessage.textContent = "Balance API 需要登录态。";
-    balanceDetails.textContent = provider.id === "deepseek"
-      ? "请把登录后的 Cookie 写入 ~/.copilot/deepseek.env 的 COPILOT_DEEPSEEK_COOKIE（或 COPILOT_PROVIDER_COOKIE），然后刷新页面。"
-      : "请先在浏览器里手动登录阿里云，再把登录后的 Cookie 写入 ~/.copilot/qwen.env 的 COPILOT_QWEN_COOKIE，或在 providers.local.json 的 headers 里配置 Cookie。";
-  } else if (provider.balance?.state === "no_xhr_found") {
-    balanceMessage.textContent = "Balance 接口已请求，但未自动识别到可用的数据入口。";
-    balanceDetails.textContent = "这通常说明 Cookie 可用，但页面脚本里的数据接口没有被当前规则命中。你可以把 Network 里看到的 JSON/RPC 接口 URL 补到本地配置，或继续放宽自动识别规则。";
-  } else if (provider.balance?.state === "busy") {
-    balanceMessage.textContent = "Balance 页面当前繁忙。";
-    balanceDetails.textContent = "百炼控制台当前在浏览器里提示“系统繁忙，请刷新页面重试”。先刷新页面或稍后再试，再继续抓取用量/余额。";
-  } else if (provider.balance?.state === "error") {
-    balanceMessage.textContent = `Balance API 状态：${provider.balance.state}${provider.balance.error ? ` - ${provider.balance.error}` : ""}`;
-    balanceDetails.textContent = provider.id === "deepseek"
-      ? "DeepSeek 返回异常时，请先检查 API Key 与 COPILOT_DEEPSEEK_COOKIE 是否有效，再确认 base_url 是否可访问。"
-      : "Qwen 控制台页面通常需要登录态；如果直接抓取页面失败，请在本地配置中补充 Cookie 或使用可访问的内部数据源。";
-  } else {
-    balanceMessage.textContent = `Balance API 状态：${provider.balance?.state ?? "unknown"}${provider.balance?.error ? ` - ${provider.balance.error}` : ""}`;
-    balanceDetails.textContent = "当前没有可用的余额抓取配置。";
-  }
-
   const usageMessage = fragment.querySelector(".usage-message");
   const usageDetails = fragment.querySelector(".usage-details");
 
@@ -184,20 +121,17 @@ function renderProviderCard(provider) {
     usageDetails.textContent = `Usage 明细：总 Token ${formatValue(provider.usage?.metrics?.totalTokens)}，输入 ${formatValue(provider.usage?.metrics?.promptTokens)}，输出 ${formatValue(provider.usage?.metrics?.completionTokens)}，请求数 ${formatValue(provider.usage?.metrics?.requestCount)}`;
   } else if (provider.usage?.state === "auth_required") {
     usageMessage.textContent = "Usage API 需要登录态。";
-    usageDetails.textContent = provider.id === "deepseek"
-      ? "请把 DeepSeek 登录后的 Cookie 写入 ~/.copilot/deepseek.env 的 COPILOT_DEEPSEEK_COOKIE（或 COPILOT_PROVIDER_COOKIE）。"
-      : "同样需要先完成阿里云手动登录，然后把登录后的 Cookie 提供给本地程序。";
+    const fallback = "请把 DeepSeek 登录后的 Cookie 写入 ~/.copilot/deepseek.env 的 COPILOT_DEEPSEEK_COOKIE（或 COPILOT_PROVIDER_COOKIE）。";
+    usageDetails.textContent = provider.usage?.error || fallback;
   } else if (provider.usage?.state === "no_xhr_found") {
     usageMessage.textContent = "Usage 接口已请求，但未自动识别到可用的数据入口。";
     usageDetails.textContent = "你现在已经登录成功，接下来要么补接口 URL，要么继续扩展自动识别规则。";
   } else if (provider.usage?.state === "busy") {
     usageMessage.textContent = "Usage 页面当前繁忙。";
-    usageDetails.textContent = "百炼控制台当前在浏览器里提示“系统繁忙，请刷新页面重试”。这时页面还没准备好数据入口，刷新后再抓。";
+    usageDetails.textContent = "页面当前繁忙，请刷新页面重试。";
   } else if (provider.usage?.state === "error") {
     usageMessage.textContent = `Usage API 状态：${provider.usage.state}${provider.usage.error ? ` - ${provider.usage.error}` : ""}`;
-    usageDetails.textContent = provider.id === "deepseek"
-      ? "DeepSeek usage 报错时，请先确认 usageApi 配置是否启用，以及 API Key/Cookie 是否仍然有效。"
-      : "Qwen 的 usage 统计通常需要控制台监控页或账单页的数据源；如果这里失败，请先确认页面是否可访问或数据源是否已配置。";
+    usageDetails.textContent = "DeepSeek usage 报错时，请先确认 usageApi 配置是否启用，以及 API Key/Cookie 是否仍然有效。";
   } else {
     usageMessage.textContent = `Usage API 状态：${provider.usage?.state ?? "unknown"}${provider.usage?.error ? ` - ${provider.usage.error}` : ""}`;
     usageDetails.textContent = "当前没有可用的 usage 抓取配置。";
@@ -207,35 +141,18 @@ function renderProviderCard(provider) {
     const deepseek = provider.usage?.metrics?.deepseek;
     const summary = deepseek?.summary ?? {};
     fragment.querySelector(".deepseek-kpi-recharge").textContent = formatNumber(summary.rechargeBalance, 4);
-    fragment.querySelector(".deepseek-kpi-bonus").textContent = formatNumber(summary.bonusBalance, 4);
     fragment.querySelector(".deepseek-kpi-cost").textContent = formatNumber(summary.monthlyCost, 6);
     fragment.querySelector(".deepseek-kpi-monthly-usage").textContent = formatNumber(summary.monthlyTokenUsage, 0);
     fragment.querySelector(".deepseek-kpi-total-token").textContent = formatNumber(summary.totalAvailableTokenEstimation, 0);
-    fragment.querySelector(".deepseek-kpi-current-token").textContent = formatNumber(summary.currentToken, 0);
 
     const daily = Array.isArray(deepseek?.daily) ? deepseek.daily : [];
-    const requestRows = daily.slice(-15).map((item) => ({
-      label: item.date?.slice(5) ?? "-",
-      value: Number(item.requests ?? 0)
-    }));
-    const tokenRows = daily.slice(-15).map((item) => ({
-      label: item.date?.slice(5) ?? "-",
-      value: Number(item.tokens ?? 0)
-    }));
-    const modelTotals = deepseek?.modelTotals ?? {};
-    const modelRequestRows = [
-      { label: "chat", value: Number(modelTotals.chat?.requests ?? 0) },
-      { label: "reasoner", value: Number(modelTotals.reasoner?.requests ?? 0) }
-    ];
-    const modelTokenRows = [
-      { label: "chat", value: Number(modelTotals.chat?.tokens ?? 0) },
-      { label: "reasoner", value: Number(modelTotals.reasoner?.tokens ?? 0) }
-    ];
+    const requestRows = buildFullMonthRows(deepseek?.period, daily, "requests");
+    const tokenRows = buildFullMonthRows(deepseek?.period, daily, "tokens");
 
     fragment.querySelector(".chart-requests").appendChild(createChartRows(requestRows));
     fragment.querySelector(".chart-tokens").appendChild(createChartRows(tokenRows));
-    fragment.querySelector(".chart-model-requests").appendChild(createChartRows(modelRequestRows));
-    fragment.querySelector(".chart-model-tokens").appendChild(createChartRows(modelTokenRows));
+    usageMessage.textContent = "";
+    usageDetails.textContent = "";
   }
 
   const warningList = fragment.querySelector(".warning-list");
@@ -247,6 +164,34 @@ function renderProviderCard(provider) {
   }
 
   return fragment;
+}
+
+function buildFullMonthRows(period, daily, key) {
+  const year = Number(period?.year);
+  const month = Number(period?.month);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    return (daily ?? []).map((item) => ({
+      label: item.date?.slice(5) ?? "-",
+      value: Number(item?.[key] ?? 0)
+    }));
+  }
+
+  const byDate = new Map(
+    (daily ?? []).map((item) => [String(item.date ?? ""), Number(item?.[key] ?? 0)])
+  );
+  const lastDay = new Date(year, month, 0).getDate();
+  const rows = [];
+
+  for (let day = 1; day <= lastDay; day += 1) {
+    const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    rows.push({
+      label: `${month}/${day}`,
+      value: byDate.get(date) ?? 0
+    });
+  }
+
+  return rows;
 }
 
 function createChartRows(rows) {
@@ -265,9 +210,10 @@ function createChartRows(rows) {
     const item = document.createElement("div");
     item.className = "chart-row";
     const percent = Math.max(0, Math.min(100, (row.value / max) * 100));
+    const visiblePercent = row.value > 0 ? Math.max(2, percent) : 0;
     item.innerHTML = `
       <span>${row.label}</span>
-      <span class="chart-bar-wrap"><span class="chart-bar" style="width:${percent}%"></span></span>
+      <span class="chart-bar-wrap"><span class="chart-bar" style="width:${visiblePercent}%"></span></span>
       <span>${formatNumber(row.value, 0)}</span>
     `;
     container.appendChild(item);
