@@ -179,6 +179,23 @@ function resolveUrl(candidateUrl, baseUrl) {
   }
 }
 
+function remapDeepseekStaticApiHost(candidateUrl, pageUrl) {
+  try {
+    const resolved = new URL(candidateUrl);
+    const page = new URL(pageUrl);
+    if (
+      resolved.hostname === "fe-static.deepseek.com" &&
+      resolved.pathname.startsWith("/api/")
+    ) {
+      return `${page.protocol}//${page.host}${resolved.pathname}${resolved.search}${resolved.hash}`;
+    }
+
+    return candidateUrl;
+  } catch {
+    return candidateUrl;
+  }
+}
+
 function isLikelyCandidateUrl(candidateUrl) {
   if (!candidateUrl || typeof candidateUrl !== "string") {
     return false;
@@ -194,7 +211,7 @@ function isLikelyCandidateUrl(candidateUrl) {
 
   try {
     const url = new URL(candidateUrl);
-    const allowedHost = /(?:^|\.)?(?:bailian\.console\.aliyun\.com|modelstudio\.console\.alibabacloud\.com|billing-cost\.console\.aliyun\.com|usercenter2\.aliyun\.com|m\.api\.aliyun-inc\.com|api\.aliyun\.com|dashscope\.aliyuncs\.com|aliyun\.com|alicdn\.com|g\.alicdn\.com)$/i.test(url.hostname);
+    const allowedHost = /(?:^|\.)?(?:platform\.deepseek\.com|deepseek\.com|bailian\.console\.aliyun\.com|modelstudio\.console\.alibabacloud\.com|billing-cost\.console\.aliyun\.com|usercenter2\.aliyun\.com|m\.api\.aliyun-inc\.com|api\.aliyun\.com|dashscope\.aliyuncs\.com|aliyun\.com|alicdn\.com|g\.alicdn\.com)$/i.test(url.hostname);
 
     if (!allowedHost) {
       return false;
@@ -252,6 +269,7 @@ function shouldScanScript(scriptUrl, pageUrl) {
     const pageHost = new URL(pageUrl).hostname;
     return (
       scriptHost === pageHost ||
+      scriptHost.endsWith(".deepseek.com") ||
       scriptHost.endsWith(".aliyun.com") ||
       scriptHost.endsWith(".alicdn.com") ||
       scriptHost.endsWith(".aliyuncs.com")
@@ -399,10 +417,11 @@ async function discoverXhrCandidates(pageUrl, html, headers) {
   }
 
   return [...candidateUrls]
+    .map((candidateUrl) => remapDeepseekStaticApiHost(candidateUrl, pageUrl))
     .filter((candidateUrl) => candidateUrl !== pageUrl)
     .map((candidateUrl) => ({
       url: candidateUrl,
-      score: /usage|quota|balance|billing|expense|telemetry|monitor|query|json|data/i.test(candidateUrl) ? 2 : 1
+      score: /usage|quota|balance|billing|expense|telemetry|monitor|query|json|data|summary|get_usr|amount|cost|wallet|token/i.test(candidateUrl) ? 2 : 1
     }))
     .filter((item) => item.score >= 2)
     .sort((a, b) => b.score - a.score);
@@ -512,6 +531,27 @@ async function fetchCandidateResource(candidate, context) {
     url: candidate.url,
     text: safeStringify(payload)
   };
+}
+
+function buildDeepseekUsageFallbackCandidates(basePageUrl) {
+  let origin = "https://platform.deepseek.com";
+  try {
+    origin = new URL(basePageUrl).origin;
+  } catch {
+    // keep default origin
+  }
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+
+  return [
+    `${origin}/api/v0/users/get_usr_summary`,
+    `${origin}/api/v0/users/get_user_summary`,
+    `${origin}/api/v0/usage/amount?month=${month}&year=${year}`,
+    `${origin}/api/v0/usage/cost?month=${month}&year=${year}`,
+    `${origin}/api/v0/usage/cost.list?month=${month}&year=${year}`
+  ];
 }
 
 function hasParsedValue(metrics) {
@@ -690,7 +730,14 @@ async function fetchResource(apiConfig, context, parser, kind) {
   let sawAuthRequired = false;
 
   for (const candidate of candidates.slice(0, apiConfig.maxDiscoveryCandidates ?? 8)) {
-    const candidateResult = await fetchCandidateResource(candidate, context).catch((error) => ({
+    const candidateResult = await fetchCandidateResource({
+      ...candidate,
+      method: candidate.method ?? apiConfig.discoveryMethod ?? "GET",
+      headers: {
+        ...(apiConfig.headers ?? {}),
+        ...(candidate.headers ?? {})
+      }
+    }, context).catch((error) => ({
       state: "error",
       reason: error.message
     }));
@@ -715,6 +762,38 @@ async function fetchResource(apiConfig, context, parser, kind) {
         discoveryCandidates: candidates.map((item) => item.url),
         metrics
       };
+    }
+  }
+
+  if (context.providerId === "deepseek" && kind === "usage") {
+    const fallbackUrls = buildDeepseekUsageFallbackCandidates(url);
+    for (const fallbackUrl of fallbackUrls) {
+      if (candidates.some((item) => item.url === fallbackUrl)) {
+        continue;
+      }
+
+      const candidateResult = await fetchCandidateResource({
+        url: fallbackUrl,
+        method: "GET",
+        headers: apiConfig.headers ?? {}
+      }, context).catch((error) => ({
+        state: "error",
+        reason: error.message
+      }));
+
+      if (candidateResult.state !== "ok") {
+        continue;
+      }
+
+      const metrics = parseUsage(candidateResult, parser);
+      if (hasParsedValue(metrics)) {
+        return {
+          ...candidateResult,
+          discoveredFrom: url,
+          discoveryCandidates: [...candidates.map((item) => item.url), ...fallbackUrls],
+          metrics
+        };
+      }
     }
   }
 
@@ -748,6 +827,17 @@ function readJsonOrTextValue(payload, text, path, pattern, groupIndex = 1) {
 function parseUsage(resource, parser) {
   const { payload, text } = normalizeResourcePayload(resource);
   const quotaEntries = extractBillingQuotaEntries(payload);
+  const deepseekSummary = payload?.data?.biz_data;
+
+  if (deepseekSummary) {
+    return {
+      totalTokens: deepseekSummary.total_available_token_estimation ?? deepseekSummary.current_token ?? null,
+      promptTokens: deepseekSummary.monthly_token_usage ?? deepseekSummary.monthly_usage ?? null,
+      completionTokens: deepseekSummary.total_usage ?? null,
+      requestCount: deepseekSummary.current_token ?? null,
+      updatedAt: null
+    };
+  }
 
   if (quotaEntries.length > 0) {
     const aggregate = aggregateQuotaEntries(quotaEntries);
@@ -906,6 +996,276 @@ function aggregateQuotaEntries(entries) {
   };
 }
 
+function resolveDeepseekOrigin(provider) {
+  try {
+    return new URL(provider?.usageApi?.url ?? "https://platform.deepseek.com/usage").origin;
+  } catch {
+    return "https://platform.deepseek.com";
+  }
+}
+
+function resolveDeepseekUsageUrls(provider, context) {
+  const origin = resolveDeepseekOrigin(provider);
+  const year = context.year;
+  const month = context.month;
+  const apis = provider.deepseekUsageApis ?? {};
+
+  return {
+    summaryUrl: applyTemplate(apis.summaryUrl ?? `${origin}/api/v0/users/get_user_summary`, context),
+    amountUrl: applyTemplate(apis.amountUrl ?? `${origin}/api/v0/usage/amount?month=${month}&year=${year}`, context),
+    costUrl: applyTemplate(apis.costUrl ?? `${origin}/api/v0/usage/cost?month=${month}&year=${year}`, context)
+  };
+}
+
+function normalizeDeepseekBizPayload(payload) {
+  const data = payload?.data ?? {};
+  const bizCode = data?.biz_code;
+  const bizMsg = data?.biz_msg;
+  const rootCode = payload?.code;
+  const rootMsg = payload?.msg;
+  const bizDataRaw = data?.biz_data;
+  const bizData = Array.isArray(bizDataRaw) ? (bizDataRaw[0] ?? {}) : (bizDataRaw ?? {});
+
+  return {
+    ok: rootCode === 0 && (bizCode === 0 || bizCode === undefined),
+    rootCode,
+    rootMsg,
+    bizCode,
+    bizMsg,
+    bizData
+  };
+}
+
+function toNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function deepseekUsageArrayToMap(usage) {
+  const map = {};
+  for (const item of usage ?? []) {
+    const type = String(item?.type ?? "").toUpperCase();
+    if (!type) {
+      continue;
+    }
+    map[type] = toNumber(item?.amount);
+  }
+  return map;
+}
+
+function detectDeepseekModelBucket(model) {
+  const normalized = String(model ?? "").toLowerCase();
+  if (!normalized) {
+    return "other";
+  }
+  if (normalized.includes("deepseek-chat") && normalized.includes("deepseek-reasoner")) {
+    return "combined";
+  }
+  if (normalized.includes("deepseek-chat")) {
+    return "chat";
+  }
+  if (normalized.includes("deepseek-reasoner")) {
+    return "reasoner";
+  }
+  return "other";
+}
+
+function buildEmptyModelTotals() {
+  return {
+    chat: { requests: 0, tokens: 0, cost: 0 },
+    reasoner: { requests: 0, tokens: 0, cost: 0 },
+    combined: { requests: 0, tokens: 0, cost: 0 },
+    other: { requests: 0, tokens: 0, cost: 0 }
+  };
+}
+
+function collectDeepseekDailySeries(amountBizData, costBizData) {
+  const byDate = new Map();
+  const modelTotals = buildEmptyModelTotals();
+
+  const ensureDay = (date) => {
+    if (!byDate.has(date)) {
+      byDate.set(date, {
+        date,
+        requests: 0,
+        tokens: 0,
+        cost: 0,
+        chatRequests: 0,
+        reasonerRequests: 0,
+        chatTokens: 0,
+        reasonerTokens: 0
+      });
+    }
+    return byDate.get(date);
+  };
+
+  for (const day of amountBizData?.days ?? []) {
+    const date = day?.date;
+    if (!date) {
+      continue;
+    }
+    const row = ensureDay(date);
+    for (const modelItem of day?.data ?? []) {
+      const usageMap = deepseekUsageArrayToMap(modelItem?.usage);
+      const requests = usageMap.REQUEST ?? 0;
+      const tokens =
+        (usageMap.PROMPT_TOKEN ?? 0) +
+        (usageMap.PROMPT_CACHE_HIT_TOKEN ?? 0) +
+        (usageMap.PROMPT_CACHE_MISS_TOKEN ?? 0) +
+        (usageMap.RESPONSE_TOKEN ?? 0);
+      const bucket = detectDeepseekModelBucket(modelItem?.model);
+
+      row.requests += requests;
+      row.tokens += tokens;
+      modelTotals[bucket].requests += requests;
+      modelTotals[bucket].tokens += tokens;
+
+      if (bucket === "chat") {
+        row.chatRequests += requests;
+        row.chatTokens += tokens;
+      } else if (bucket === "reasoner") {
+        row.reasonerRequests += requests;
+        row.reasonerTokens += tokens;
+      } else if (bucket === "combined") {
+        row.chatRequests += requests;
+        row.reasonerRequests += requests;
+        row.chatTokens += tokens;
+        row.reasonerTokens += tokens;
+      }
+    }
+  }
+
+  for (const day of costBizData?.days ?? []) {
+    const date = day?.date;
+    if (!date) {
+      continue;
+    }
+    const row = ensureDay(date);
+    for (const modelItem of day?.data ?? []) {
+      const usageMap = deepseekUsageArrayToMap(modelItem?.usage);
+      const modelCost = Object.values(usageMap).reduce((sum, value) => sum + toNumber(value), 0);
+      const bucket = detectDeepseekModelBucket(modelItem?.model);
+      row.cost += modelCost;
+      modelTotals[bucket].cost += modelCost;
+    }
+  }
+
+  const daily = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  return { daily, modelTotals };
+}
+
+async function fetchDeepseekJson(url, headers) {
+  const response = await fetch(url, { method: "GET", headers });
+  const contentType = response.headers.get("content-type") ?? "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  return {
+    ok: response.ok,
+    statusCode: response.status,
+    contentType,
+    payload,
+    url
+  };
+}
+
+function isDeepseekAuthFailure(payload) {
+  const code = payload?.code;
+  const msg = String(payload?.msg ?? "");
+  return code === 40002 || code === 40003 || /Missing Token|Authorization Failed|Not Login/i.test(msg);
+}
+
+async function collectDeepseekUsage(provider, context, warnings) {
+  const referer = provider?.usageApi?.url ?? "https://platform.deepseek.com/usage";
+  const headers = {
+    ...buildHeaders(provider?.usageApi?.headers, context),
+    Referer: referer
+  };
+  const { summaryUrl, amountUrl, costUrl } = resolveDeepseekUsageUrls(provider, context);
+
+  const [summaryRes, amountRes, costRes] = await Promise.all([
+    fetchDeepseekJson(summaryUrl, headers),
+    fetchDeepseekJson(amountUrl, headers),
+    fetchDeepseekJson(costUrl, headers)
+  ]);
+
+  const responses = [summaryRes, amountRes, costRes];
+  if (responses.some((item) => !item.ok)) {
+    const failed = responses.find((item) => !item.ok);
+    return {
+      state: "error",
+      reason: `DeepSeek usage 接口请求失败: ${failed?.statusCode ?? "unknown"}`,
+      url: failed?.url ?? summaryUrl,
+      discoveryCandidates: [summaryUrl, amountUrl, costUrl]
+    };
+  }
+
+  if ([summaryRes, amountRes, costRes].some((item) => isDeepseekAuthFailure(item.payload))) {
+    return {
+      state: "auth_required",
+      reason: "DeepSeek usage 接口鉴权失败，请检查 Web Token / Cookie",
+      url: summaryUrl,
+      discoveryCandidates: [summaryUrl, amountUrl, costUrl]
+    };
+  }
+
+  const summaryNormalized = normalizeDeepseekBizPayload(summaryRes.payload);
+  const amountNormalized = normalizeDeepseekBizPayload(amountRes.payload);
+  const costNormalized = normalizeDeepseekBizPayload(costRes.payload);
+
+  if (!summaryNormalized.ok || !amountNormalized.ok || !costNormalized.ok) {
+    return {
+      state: "error",
+      reason: "DeepSeek usage 返回 biz_code 非 0 或数据结构异常",
+      url: summaryUrl,
+      discoveryCandidates: [summaryUrl, amountUrl, costUrl]
+    };
+  }
+
+  const summary = summaryNormalized.bizData ?? {};
+  const { daily, modelTotals } = collectDeepseekDailySeries(amountNormalized.bizData, costNormalized.bizData);
+  const monthlyCost = (summary.monthly_costs ?? []).reduce((sum, item) => sum + toNumber(item?.amount), 0);
+  const rechargeBalance = (summary.normal_wallets ?? []).reduce((sum, item) => sum + toNumber(item?.balance), 0);
+  const bonusBalance = (summary.bonus_wallets ?? []).reduce((sum, item) => sum + toNumber(item?.balance), 0);
+  const monthlyTokenUsage = toNumber(summary.monthly_token_usage ?? summary.monthly_usage);
+  const totalAvailableTokenEstimation = toNumber(summary.total_available_token_estimation);
+
+  if (daily.length === 0) {
+    warnings.push("DeepSeek usage 本月 days 数据为空，图表将显示为空");
+  }
+
+  return {
+    state: "ok",
+    url: summaryUrl,
+    contentType: "application/json",
+    discoveryCandidates: [summaryUrl, amountUrl, costUrl],
+    metrics: {
+      totalTokens: totalAvailableTokenEstimation,
+      promptTokens: monthlyTokenUsage,
+      completionTokens: toNumber(summary.total_usage),
+      requestCount: daily.reduce((sum, item) => sum + toNumber(item.requests), 0),
+      updatedAt: new Date().toISOString(),
+      deepseek: {
+        period: {
+          year: context.year,
+          month: context.month
+        },
+        summary: {
+          rechargeBalance,
+          bonusBalance,
+          monthlyCost,
+          monthlyTokenUsage,
+          totalAvailableTokenEstimation,
+          currentToken: toNumber(summary.current_token)
+        },
+        daily,
+        modelTotals
+      }
+    }
+  };
+}
+
 export async function collectProviderSnapshot(provider) {
   if (provider.enabled === false) {
     return {
@@ -923,10 +1283,13 @@ export async function collectProviderSnapshot(provider) {
     model: provider.model,
     providerId: provider.id,
     sessionCookie: provider.sessionCookie,
+    webToken: provider.webToken,
     userAgent: provider.userAgent,
     workspaceId: provider.workspaceId,
     region: provider.region ?? provider.workspaceId,
-    collina: provider.collina ?? ""
+    collina: provider.collina ?? "",
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1
   };
 
   const warnings = [];
@@ -935,7 +1298,7 @@ export async function collectProviderSnapshot(provider) {
     warnings.push("未找到 provider env 文件");
   }
 
-  if (!provider.apiKey) {
+  if (provider.id !== "deepseek" && !provider.apiKey) {
     warnings.push("未从 env 中读取到 API Key");
   }
 
@@ -943,20 +1306,47 @@ export async function collectProviderSnapshot(provider) {
     warnings.push("Qwen collina 未配置");
   }
 
-  const [usageResult, balanceResult] = await Promise.all([
-    fetchResource(provider.usageApi, context, provider.parser?.usage, "usage").catch((error) => ({
-      state: "error",
-      reason: error.message
-    })),
-    fetchResource(provider.balanceApi, context, provider.parser?.balance, "balance").catch((error) => ({
-      state: "error",
-      reason: error.message
-    }))
-  ]);
+  if (provider.id === "deepseek" && !provider.webToken) {
+    warnings.push("DeepSeek usage 网页 token 未配置（可在 deepseek.env 设置 COPILOT_DEEPSEEK_WEB_TOKEN）");
+  }
+
+  const [usageResult, balanceResult] = provider.id === "deepseek"
+    ? await Promise.all([
+        collectDeepseekUsage(provider, context, warnings).catch((error) => ({
+          state: "error",
+          reason: error.message
+        })),
+        Promise.resolve({
+          state: "skipped",
+          reason: "DeepSeek 已启用 usage-only 模式，不再采集 balance"
+        })
+      ])
+    : await Promise.all([
+        fetchResource(provider.usageApi, context, provider.parser?.usage, "usage").catch((error) => ({
+          state: "error",
+          reason: error.message
+        })),
+        fetchResource(provider.balanceApi, context, provider.parser?.balance, "balance").catch((error) => ({
+          state: "error",
+          reason: error.message
+        }))
+      ]);
 
   let status = "ready";
 
-  if (usageResult.state === "skipped" && balanceResult.state === "skipped") {
+  if (provider.id === "deepseek") {
+    if (usageResult.state === "skipped") {
+      status = "needs_configuration";
+    } else if (usageResult.state === "busy") {
+      status = "busy";
+    } else if (usageResult.state === "auth_required") {
+      status = "auth_required";
+    } else if (usageResult.state === "error" || usageResult.state === "no_xhr_found") {
+      status = "partial";
+    } else {
+      status = "ready";
+    }
+  } else if (usageResult.state === "skipped" && balanceResult.state === "skipped") {
     status = "needs_configuration";
   } else if (usageResult.state === "busy" || balanceResult.state === "busy") {
     status = "busy";
@@ -991,7 +1381,7 @@ export async function collectProviderSnapshot(provider) {
         url: usageResult.url ?? null,
         contentType: usageResult.contentType ?? null,
         responseType: provider.usageApi?.responseType ?? "json",
-        authConfigured: Boolean(provider.sessionCookie),
+        authConfigured: Boolean(provider.sessionCookie || provider.webToken),
         discoveredFrom: usageResult.discoveredFrom ?? null,
         discoveryCandidates: usageResult.discoveryCandidates ?? []
       },
@@ -1000,7 +1390,7 @@ export async function collectProviderSnapshot(provider) {
         url: balanceResult.url ?? null,
         contentType: balanceResult.contentType ?? null,
         responseType: provider.balanceApi?.responseType ?? "json",
-        authConfigured: Boolean(provider.sessionCookie),
+        authConfigured: Boolean(provider.sessionCookie || provider.webToken),
         discoveredFrom: balanceResult.discoveredFrom ?? null,
         discoveryCandidates: balanceResult.discoveryCandidates ?? []
       }

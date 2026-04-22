@@ -5,33 +5,28 @@
       "id": "deepseek",
       "enabled": true,
       "usageApi": {
-        "url": "",
+        "url": "https://platform.deepseek.com/usage",
         "method": "GET",
+        "responseType": "html",
         "headers": {
-          "Authorization": "Bearer ${apiKey}"
+          "Authorization": "Bearer ${webToken}",
+          "Cookie": "${sessionCookie}",
+          "Referer": "https://platform.deepseek.com/usage"
         }
       },
-      "balanceApi": {
-        "url": "${baseUrl}/user/balance",
-        "method": "GET",
-        "headers": {
-          "Authorization": "Bearer ${apiKey}"
-        }
+      "deepseekUsageApis": {
+        "summaryUrl": "https://platform.deepseek.com/api/v0/users/get_user_summary",
+        "amountUrl": "https://platform.deepseek.com/api/v0/usage/amount?month=${month}&year=${year}",
+        "costUrl": "https://platform.deepseek.com/api/v0/usage/cost?month=${month}&year=${year}"
       },
       "parser": {
         "usage": {
-          "totalTokensPath": "data.total_tokens",
-          "promptTokensPath": "data.prompt_tokens",
-          "completionTokensPath": "data.completion_tokens",
-          "requestCountPath": "data.request_count"
+          "totalTokensPath": "data.biz_data.total_available_token_estimation",
+          "promptTokensPath": "data.biz_data.monthly_token_usage",
+          "completionTokensPath": "data.biz_data.total_usage",
+          "requestCountPath": "data.biz_data.current_token"
         },
-        "balance": {
-          "availablePath": "is_available",
-          "currencyPath": "balance_infos.0.currency",
-          "totalBalancePath": "balance_infos.0.total_balance",
-          "grantedBalancePath": "balance_infos.0.granted_balance",
-          "toppedUpBalancePath": "balance_infos.0.topped_up_balance"
-        }
+        "balance": {}
       }
     },
     {

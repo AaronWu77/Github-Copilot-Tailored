@@ -18,21 +18,32 @@ const DEFAULT_PROVIDER_ENV_FILES = [
 function getDefaultProviderConfig(providerId) {
   if (providerId === "deepseek") {
     return {
-      balanceApi: {
-        url: "${baseUrl}/user/balance",
+      usageApi: {
+        url: "https://platform.deepseek.com/usage",
         method: "GET",
+        responseType: "html",
+        discoverXhr: true,
+        maxDiscoveryCandidates: 12,
         headers: {
-          Authorization: "Bearer ${apiKey}"
+          Authorization: "Bearer ${webToken}",
+          Cookie: "${sessionCookie}",
+          "User-Agent": "${userAgent}",
+          Referer: "https://platform.deepseek.com/usage"
         }
       },
+      deepseekUsageApis: {
+        summaryUrl: "https://platform.deepseek.com/api/v0/users/get_user_summary",
+        amountUrl: "https://platform.deepseek.com/api/v0/usage/amount?month=${month}&year=${year}",
+        costUrl: "https://platform.deepseek.com/api/v0/usage/cost?month=${month}&year=${year}"
+      },
       parser: {
-        balance: {
-          availablePath: "is_available",
-          currencyPath: "balance_infos.0.currency",
-          totalBalancePath: "balance_infos.0.total_balance",
-          grantedBalancePath: "balance_infos.0.granted_balance",
-          toppedUpBalancePath: "balance_infos.0.topped_up_balance"
-        }
+        usage: {
+          totalTokensPath: "data.biz_data.total_available_token_estimation",
+          promptTokensPath: "data.biz_data.monthly_token_usage",
+          completionTokensPath: "data.biz_data.total_usage",
+          requestCountPath: "data.biz_data.current_token"
+        },
+        balance: {}
       }
     };
   }
@@ -238,6 +249,21 @@ function readCookieValue(cookie, name) {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
+function getDeepseekWebToken(envValues, sessionCookie) {
+  const explicitToken = envValues.COPILOT_DEEPSEEK_WEB_TOKEN ?? envValues.COPILOT_PROVIDER_WEB_TOKEN ?? "";
+  if (explicitToken) {
+    return explicitToken;
+  }
+
+  return (
+    readCookieValue(sessionCookie, "token") ||
+    readCookieValue(sessionCookie, "access_token") ||
+    readCookieValue(sessionCookie, "auth_token") ||
+    readCookieValue(sessionCookie, "ds_token") ||
+    ""
+  );
+}
+
 function uniqueById(items) {
   const map = new Map();
 
@@ -284,6 +310,10 @@ function mergeProvider(baseProvider, configProvider) {
       ...(baseProvider.balanceApi ?? {}),
       ...(configProvider.balanceApi ?? {})
     },
+    deepseekUsageApis: {
+      ...(baseProvider.deepseekUsageApis ?? {}),
+      ...(configProvider.deepseekUsageApis ?? {})
+    },
     parser: {
       ...(baseProvider.parser ?? {}),
       ...(configProvider.parser ?? {}),
@@ -318,6 +348,10 @@ export function loadMonitorConfig(projectRoot) {
     const envSource = readEnvFile(configProvider?.envFile ?? baseProvider.envFile);
     const envValues = envSource?.values ?? {};
     const defaultConfig = getDefaultProviderConfig(baseProvider.id);
+    const sessionCookie = baseProvider.id === "deepseek"
+      ? envValues.COPILOT_DEEPSEEK_COOKIE ?? envValues.COPILOT_PROVIDER_COOKIE ?? ""
+      : envValues.COPILOT_QWEN_COOKIE ?? envValues.COPILOT_PROVIDER_COOKIE ?? "";
+    const webToken = baseProvider.id === "deepseek" ? getDeepseekWebToken(envValues, sessionCookie) : "";
 
     mergedProviders.push(
       mergeProvider(
@@ -330,10 +364,11 @@ export function loadMonitorConfig(projectRoot) {
           baseUrl: envValues.COPILOT_PROVIDER_BASE_URL ?? "",
           apiKey: envValues.COPILOT_PROVIDER_API_KEY ?? "",
           model: envValues.COPILOT_MODEL ?? "",
-          sessionCookie: envValues.COPILOT_QWEN_COOKIE ?? envValues.COPILOT_PROVIDER_COOKIE ?? "",
+          sessionCookie,
+          webToken,
           userAgent: envValues.COPILOT_PROVIDER_USER_AGENT ?? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          workspaceId: envValues.COPILOT_QWEN_WORKSPACE_ID ?? envValues.COPILOT_PROVIDER_WORKSPACE_ID ?? readCookieValue(envValues.COPILOT_QWEN_COOKIE ?? envValues.COPILOT_PROVIDER_COOKIE ?? "", "currentRegionId") ?? (baseProvider.id === "qwen" ? "cn-beijing" : ""),
-          region: envValues.COPILOT_QWEN_REGION ?? envValues.COPILOT_PROVIDER_REGION ?? readCookieValue(envValues.COPILOT_QWEN_COOKIE ?? envValues.COPILOT_PROVIDER_COOKIE ?? "", "currentRegionId") ?? (baseProvider.id === "qwen" ? "cn-beijing" : ""),
+          workspaceId: envValues.COPILOT_QWEN_WORKSPACE_ID ?? envValues.COPILOT_PROVIDER_WORKSPACE_ID ?? readCookieValue(sessionCookie, "currentRegionId") ?? (baseProvider.id === "qwen" ? "cn-beijing" : ""),
+          region: envValues.COPILOT_QWEN_REGION ?? envValues.COPILOT_PROVIDER_REGION ?? readCookieValue(sessionCookie, "currentRegionId") ?? (baseProvider.id === "qwen" ? "cn-beijing" : ""),
           collina: envValues.COPILOT_QWEN_COLLINA ?? envValues.COPILOT_PROVIDER_COLLINA ?? "",
           usageApi: defaultConfig.usageApi,
           balanceApi: defaultConfig.balanceApi,
@@ -358,7 +393,7 @@ export function loadMonitorConfig(projectRoot) {
 }
 
 export function sanitizeProvider(provider) {
-  const { apiKey, usageApi, balanceApi, ...rest } = provider;
+  const { apiKey, webToken, usageApi, balanceApi, ...rest } = provider;
 
   return {
     ...rest,

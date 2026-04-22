@@ -68,7 +68,7 @@
         </dl>
 
         <h4>Usage</h4>
-        <dl class="metrics-grid">
+        <dl class="metrics-grid usage-basic-section">
           <div>
             <dt>总 Token</dt>
             <dd class="metric-usage-total">-</dd>
@@ -91,8 +91,8 @@
           </div>
         </dl>
 
-        <h4>Balance</h4>
-        <dl class="metrics-grid">
+        <h4 class="balance-title">Balance</h4>
+        <dl class="metrics-grid balance-section">
           <div>
             <dt>可用状态</dt>
             <dd class="metric-balance-available">-</dd>
@@ -130,6 +130,55 @@
           <p class="balance-details"></p>
           <ul class="warning-list"></ul>
         </div>
+
+        <section class="deepseek-usage-section">
+          <h4>DeepSeek Usage 面板</h4>
+          <dl class="metrics-grid deepseek-kpi-grid">
+            <div>
+              <dt>充值余额</dt>
+              <dd class="deepseek-kpi-recharge">-</dd>
+            </div>
+            <div>
+              <dt>赠金余额</dt>
+              <dd class="deepseek-kpi-bonus">-</dd>
+            </div>
+            <div>
+              <dt>本月消费</dt>
+              <dd class="deepseek-kpi-cost">-</dd>
+            </div>
+            <div>
+              <dt>本月用量</dt>
+              <dd class="deepseek-kpi-monthly-usage">-</dd>
+            </div>
+            <div>
+              <dt>可用 Token 估算</dt>
+              <dd class="deepseek-kpi-total-token">-</dd>
+            </div>
+            <div>
+              <dt>当前 Token</dt>
+              <dd class="deepseek-kpi-current-token">-</dd>
+            </div>
+          </dl>
+
+          <div class="chart-grid">
+            <section>
+              <h4>本月 API 请求次数（按日）</h4>
+              <div class="chart-requests"></div>
+            </section>
+            <section>
+              <h4>本月 TOKENS（按日）</h4>
+              <div class="chart-tokens"></div>
+            </section>
+            <section>
+              <h4>deepseek-chat / deepseek-reasoner 请求次数</h4>
+              <div class="chart-model-requests"></div>
+            </section>
+            <section>
+              <h4>deepseek-chat / deepseek-reasoner TOKENS</h4>
+              <div class="chart-model-tokens"></div>
+            </section>
+          </div>
+        </section>
       </article>
     </template>
 

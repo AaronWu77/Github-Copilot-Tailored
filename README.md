@@ -1,4 +1,13 @@
 # GitHub Copilot CLI API配置教程（Windows / Mac / Linux）
+
+## 更新日志（维护在文档开头）
+
+- 当前更新次数：4
+- v4：usage-monitor-web 的 DeepSeek 面板改为 Usage-only，按当月 `get_user_summary/amount/cost` 重建余额与图表数据。
+- v3：usage-monitor-web 增加 DeepSeek Web Token 配置（`COPILOT_DEEPSEEK_WEB_TOKEN`），用于 usage 网页接口鉴权。
+- v2：usage-monitor-web 新增 DeepSeek usage 自动抓取与 `biz_data` 解析（兼容 get_usr_summary/amount/cost 等接口）。
+- v1：补充 usage-monitor-web DeepSeek Cookie 登录态说明与故障修复指引（默认请求头注入 Cookie、按 provider 区分提示文案）。
+
 ---
 
 这份教程，目标是在本地把自己的API模型配置到 Copilot CLI 中：

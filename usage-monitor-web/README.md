@@ -1,12 +1,23 @@
 # usage-monitor-web 使用教程
 
+## 更新日志（文档头部维护）
+
+- 当前更新次数：5
+- v5：DeepSeek 切换为 Usage-only 数据流：按系统当前年月请求 `get_user_summary` + `usage/amount` + `usage/cost`，前端新增请求数/TOKENS图表并移除 DeepSeek balance 展示。
+- v4：DeepSeek usage 增加 Web Token 支持（`COPILOT_DEEPSEEK_WEB_TOKEN`），默认携带 `Authorization: Bearer <webToken>` + Cookie，并补充 deepseek.com 站点下接口自动发现。
+- v3：DeepSeek usage 新增自动抓取模式（默认请求 `https://platform.deepseek.com/usage` 并自动发现 `get_usr_summary/amount/cost` 等接口），内置 `biz_data` 结构解析。
+- v2：修复 DeepSeek Cookie 接入链路（默认请求头注入 Cookie）、修复 providers.example.json 结构错误、按 provider 显示登录态提示文案。
+- v1：接入 Qwen 控制台 RPC 抓取与登录态检测，保留 DeepSeek 官方余额接口流程。
+
+---
+
 `usage-monitor-web` 是这个仓库里的一个**独立监控原型**。它不会替换你现在的 DeepSeek / Qwen 启动方式，而是在**不影响现有 API 部署和切换流程**的前提下，额外提供一个本地网页面板。
 
-当前版本已经优先接入 **DeepSeek 官方余额接口**，同时补上了 **Qwen 百炼控制台的 RPC 抓取能力**：
+当前版本已经把 DeepSeek 迁移到 **Usage-only** 结构，同时保留 **Qwen 百炼控制台 RPC 抓取能力**：
 
-- 文档页：`https://api-docs.deepseek.com/zh-cn/api/get-user-balance`
-- 方法：`GET`
-- 路径：`/user/balance`
+- `GET /api/v0/users/get_user_summary`
+- `GET /api/v0/usage/amount?month={m}&year={y}`
+- `GET /api/v0/usage/cost?month={m}&year={y}`
 
 当前程序展示的重点字段是：
 
@@ -31,8 +42,9 @@
   - `COPILOT_PROVIDER_BASE_URL`
   - `COPILOT_PROVIDER_API_KEY`
   - `COPILOT_MODEL`
+- 如果是 DeepSeek，还会读取 `COPILOT_DEEPSEEK_COOKIE` / `COPILOT_PROVIDER_COOKIE`，并可选读取 `COPILOT_DEEPSEEK_WEB_TOKEN`（用于 usage 网页接口鉴权）
 - 如果是 Qwen，还会读取 `COPILOT_QWEN_COOKIE` / `COPILOT_PROVIDER_COOKIE`
-- 对 DeepSeek 默认调用官方余额接口
+- DeepSeek 默认按 Usage-only 模式采集（不再渲染 DeepSeek balance 卡片）
 - 对 Qwen 默认使用百炼控制台 RPC 作为抓取源
 - 在页面展示：
   - 可用状态
@@ -84,6 +96,10 @@
 COPILOT_PROVIDER_BASE_URL=https://api.deepseek.com/v1
 COPILOT_PROVIDER_API_KEY=你的DeepSeekKey
 COPILOT_MODEL=deepseek-reasoner
+# 如需登录态，可选填：
+COPILOT_DEEPSEEK_COOKIE=你的DeepSeek登录后Cookie
+# 如需访问 usage 网页接口，可选填（优先于从 Cookie 自动提取 token）：
+COPILOT_DEEPSEEK_WEB_TOKEN=你的网页登录Token
 ```
 
 > 当前版本默认使用 `${baseUrl}/user/balance`，所以如果你的 `baseUrl` 是 `https://api.deepseek.com/v1`，程序就会请求：
@@ -166,14 +182,16 @@ Copy-Item .\config\providers.example.json .\config\providers.local.json
         "url": "",
         "method": "GET",
         "headers": {
-          "Authorization": "Bearer ${apiKey}"
+          "Authorization": "Bearer ${apiKey}",
+          "Cookie": "${sessionCookie}"
         }
       },
       "balanceApi": {
         "url": "${baseUrl}/user/balance",
         "method": "GET",
         "headers": {
-          "Authorization": "Bearer ${apiKey}"
+          "Authorization": "Bearer ${apiKey}",
+          "Cookie": "${sessionCookie}"
         }
       },
       "parser": {

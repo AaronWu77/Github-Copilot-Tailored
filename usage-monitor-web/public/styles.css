@@ -200,12 +200,69 @@ h4 {
   gap: 8px;
 }
 
+.deepseek-usage-section {
+  display: none;
+}
+
+.provider-card.is-deepseek .deepseek-usage-section {
+  display: block;
+}
+
+.provider-card.is-deepseek .balance-title,
+.provider-card.is-deepseek .balance-section,
+.provider-card.is-deepseek .balance-message,
+.provider-card.is-deepseek .balance-details {
+  display: none;
+}
+
+.provider-card.is-deepseek .usage-basic-section {
+  display: none;
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.chart-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.chart-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 72px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chart-bar-wrap {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.chart-bar {
+  height: 100%;
+  background: linear-gradient(135deg, #34d399, #3b82f6);
+  border-radius: 999px;
+}
+
 @media (max-width: 720px) {
   .hero {
     flex-direction: column;
   }
 
   .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-grid {
     grid-template-columns: 1fr;
   }
 }
