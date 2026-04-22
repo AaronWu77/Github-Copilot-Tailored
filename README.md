@@ -451,3 +451,8 @@ http://127.0.0.1:4173
 - 显示 `Usage API 需要登录态`：检查 Cookie 是否过期、`COPILOT_DEEPSEEK_WEB_TOKEN` 是否为空或失效
 - 显示 `Authorization Failed` / `Missing Token`：通常是 Bearer Token 不正确或已过期
 - 修改 `.env` 后无变化：重启 `usage-monitor-web`
+
+---
+# `copilot-instructions.md` 模板说明
+
+在本仓库的 `init-template/copilot-instructions.md` 中，我们提供了一个针对 GitHub Copilot CLI 的使用说明模板。这个模板包含了 Plan 模式和 Autopilot 模式的约束，以及 `/doc/plan.md` 的固定结构要求。在初始化新的仓库时，可以参考这个模板来创建 `.github/copilot-instructions.md` 文件，并根据实际需求进行调整和完善。
