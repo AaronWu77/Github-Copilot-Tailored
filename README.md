@@ -20,51 +20,48 @@
 
 ## 第 1 步：准备目录
 
-### Windows（PowerShell）已验证
-
+### Windows（PowerShell）
 ```powershell
 New-Item -ItemType Directory -Force "$HOME\.copilot" | Out-Null
 New-Item -ItemType Directory -Force "$HOME\bin" | Out-Null
 ```
 
-### Mac（zsh / bash）已验证
-
+### Mac（zsh / bash）
 ```bash
 mkdir -p ~/.copilot ~/bin
 ```
 
-### Linux（bash / zsh）未验证
-
+### Linux（bash / zsh）
 ```bash
 mkdir -p ~/.copilot ~/bin
 ```
 
 ---
 
-## 第 2 步：创建 DeepSeek 配置文件
+## 第 2 步：创建 DeepSeek/Qwen 配置文件
 
 ### Windows（PowerShell）
 
 ```powershell
 @'
 COPILOT_PROVIDER_TYPE=openai
-COPILOT_PROVIDER_BASE_URL=https://api.deepseek.com/v1
-COPILOT_PROVIDER_API_KEY=你的DeepSeekKey
-COPILOT_MODEL=deepseek-reasoner
-COPILOT_PROVIDER_MAX_PROMPT_TOKENS=128000
+COPILOT_PROVIDER_BASE_URL=https://api.deepseek.com/v1 (https://dashscope.aliyuncs.com/compatible-mode/v1)
+COPILOT_PROVIDER_API_KEY=你的DeepSeekKey/你的QwenKey
+COPILOT_MODEL=deepseek-v4-flash(pro)/qwen3.6-plus
+COPILOT_PROVIDER_MAX_PROMPT_TOKENS=256000
 COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=4096
-'@ | Set-Content -Encoding UTF8 "$HOME\.copilot\deepseek.env"
+'@ | Set-Content -Encoding UTF8 "$HOME\.copilot\deepseek.env (或者qwen.env)"
 ```
 
 ### Mac（zsh / bash）
 
 ```bash
-cat > ~/.copilot/deepseek.env <<'EOF'
+cat > ~/.copilot/deepseek.env(或者 qwen.env) <<'EOF'
 COPILOT_PROVIDER_TYPE=openai
-COPILOT_PROVIDER_BASE_URL=https://api.deepseek.com/v1
-COPILOT_PROVIDER_API_KEY=你的DeepSeekKey
-COPILOT_MODEL=deepseek-reasoner
-COPILOT_PROVIDER_MAX_PROMPT_TOKENS=128000
+COPILOT_PROVIDER_BASE_URL=https://api.deepseek.com/v1 (https://dashscope.aliyuncs.com/compatible-mode/v1)
+COPILOT_PROVIDER_API_KEY=你的DeepSeekKey/你的QwenKey
+COPILOT_MODEL=deepseek-v4-flash(pro)/qwen3.6-plus
+COPILOT_PROVIDER_MAX_PROMPT_TOKENS=256000
 COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=4096
 EOF
 ```
@@ -72,96 +69,42 @@ EOF
 ### Linux（bash / zsh）
 
 ```bash
-cat > ~/.copilot/deepseek.env <<'EOF'
+cat > ~/.copilot/deepseek.env(或者 qwen.env) <<'EOF'
 COPILOT_PROVIDER_TYPE=openai
-COPILOT_PROVIDER_BASE_URL=https://api.deepseek.com/v1
-COPILOT_PROVIDER_API_KEY=你的DeepSeekKey
-COPILOT_MODEL=deepseek-reasoner
-COPILOT_PROVIDER_MAX_PROMPT_TOKENS=128000
+COPILOT_PROVIDER_BASE_URL=https://api.deepseek.com/v1 (https://dashscope.aliyuncs.com/compatible-mode/v1)
+COPILOT_PROVIDER_API_KEY=你的DeepSeekKey/你的QwenKey
+COPILOT_MODEL=deepseek-v4-flash(pro)/qwen3.6-plus
+COPILOT_PROVIDER_MAX_PROMPT_TOKENS=256000
 COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=4096
 EOF
 ```
 
 ### 说明
 
-- `COPILOT_PROVIDER_TYPE=openai`：因为 DeepSeek 使用 OpenAI-compatible 接口
-- `COPILOT_PROVIDER_BASE_URL`：DeepSeek 接口地址
-- `COPILOT_PROVIDER_API_KEY`：你的 DeepSeek Key
-- `COPILOT_MODEL=deepseek-reasoner`：思考模式
-- `COPILOT_PROVIDER_MAX_PROMPT_TOKENS=128000`：上下文 128K
+- `COPILOT_PROVIDER_TYPE=openai`：因为 DeepSeek/Qwen 使用 OpenAI-compatible 接口
+- `COPILOT_PROVIDER_BASE_URL`：DeepSeek/Qwen 接口地址
+- `COPILOT_PROVIDER_API_KEY`：你的 DeepSeek/Qwen Key
+- `COPILOT_MODEL=deepseek-v4-flash(pro)/qwen3.6-plus`：模型选择
+- `COPILOT_PROVIDER_MAX_PROMPT_TOKENS=256000`：上下文 256K
 - `COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=4096`：输出最大 4K
-- deepseek-reasoner 目前对应的应该就是 deepseek-v3.2 的 think-mode
-- deepseek-chat 目前前对应的就是 deepseek-v3.2 的 non-thinking mode
 
 > 如果 Copilot 提示 `Model ... is not in the built-in catalog`，通常不是错误，只是 Copilot 不认识这个模型名，不能自动推断 token 上限；手动配置即可。
 
 ---
 
-## 第 3 步：创建 Qwen 配置文件
+## 第 3 步：创建 DeepSeek 启动脚本
 
 ### Windows（PowerShell）
 
 ```powershell
 @'
-COPILOT_PROVIDER_TYPE=openai
-COPILOT_PROVIDER_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-COPILOT_PROVIDER_API_KEY=你的QwenKey
-COPILOT_MODEL=qwen3.6-plus
-COPILOT_PROVIDER_MAX_PROMPT_TOKENS=1000000
-COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=65536
-'@ | Set-Content -Encoding UTF8 "$HOME\.copilot\qwen.env"
-```
-
-### Mac（zsh / bash）
-
-```bash
-cat > ~/.copilot/qwen.env <<'EOF'
-COPILOT_PROVIDER_TYPE=openai
-COPILOT_PROVIDER_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-COPILOT_PROVIDER_API_KEY=你的QwenKey
-COPILOT_MODEL=qwen3.6-plus
-COPILOT_PROVIDER_MAX_PROMPT_TOKENS=1000000
-COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=65536
-EOF
-```
-
-### Linux（bash / zsh）
-
-```bash
-cat > ~/.copilot/qwen.env <<'EOF'
-COPILOT_PROVIDER_TYPE=openai
-COPILOT_PROVIDER_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-COPILOT_PROVIDER_API_KEY=你的QwenKey
-COPILOT_MODEL=qwen3.6-plus
-COPILOT_PROVIDER_MAX_PROMPT_TOKENS=1000000
-COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=65536
-EOF
-```
-
-### 说明
-
-- `COPILOT_PROVIDER_BASE_URL`：DashScope 的 OpenAI-compatible 地址
-- `COPILOT_MODEL=qwen3.6-plus`：按你的实际模型 ID 填
-- `COPILOT_PROVIDER_MAX_PROMPT_TOKENS=1000000`：上下文 1,000,000
-- `COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=65536`：输出 65,536
-
-> 如果你的平台模型 ID 不是这个名字，请以平台文档为准。
-
----
-
-## 第 4 步：创建 DeepSeek 启动脚本
-
-### Windows（PowerShell）
-
-```powershell
-@'
-Get-Content "$HOME\.copilot\deepseek.env" | ForEach-Object {
+Get-Content "$HOME\.copilot\deepseek.env (或者 qwen.env)" | ForEach-Object {
   if ($_ -match '^\s*([^#=]+?)=(.*)$') {
     [Environment]::SetEnvironmentVariable($matches[1], $matches[2], "Process")
   }
 }
 copilot
-'@ | Set-Content -Encoding UTF8 "$HOME\bin\copilot-deepseek.ps1"
+'@ | Set-Content -Encoding UTF8 "$HOME\bin\copilot-deepseek.ps1 (copilot-qwen.ps1)"
 ```
 
 > 如果你更想简单一点，也可以直接在 PowerShell 里手动 `export` 环境变量后运行 `copilot`，但脚本更适合长期使用。
@@ -169,75 +112,32 @@ copilot
 ### Mac（zsh / bash）已验证
 
 ```bash
-cat > ~/bin/copilot-deepseek <<'EOF'
+cat > ~/bin/copilot-deepseek (或者 copilot-qwen) <<'EOF'
 #!/bin/zsh
 set -a
-source ~/.copilot/deepseek.env
+source ~/.copilot/deepseek.env (或者 qwen.env)
 set +a
 exec copilot
 EOF
-chmod +x ~/bin/copilot-deepseek
+chmod +x ~/bin/copilot-deepseek (或者~/bin/copilot-qwen)
 ```
 
 ### Linux（bash / zsh）
 
 ```bash
-cat > ~/bin/copilot-deepseek <<'EOF'
+cat > ~/bin/copilot-deepseek (或者 copilot-qwen) <<'EOF'
 #!/bin/bash
 set -a
-source ~/.copilot/deepseek.env
+source ~/.copilot/deepseek.env (或者 qwen.env)
 set +a
 exec copilot
 EOF
-chmod +x ~/bin/copilot-deepseek
+chmod +x ~/bin/copilot-deepseek (或者 ~/bin/copilot-qwen)
 ```
 
 ---
 
-## 第 5 步：创建 Qwen 启动脚本
-
-### Windows（PowerShell）
-
-```powershell
-@'
-Get-Content "$HOME\.copilot\qwen.env" | ForEach-Object {
-  if ($_ -match '^\s*([^#=]+?)=(.*)$') {
-    [Environment]::SetEnvironmentVariable($matches[1], $matches[2], "Process")
-  }
-}
-copilot
-'@ | Set-Content -Encoding UTF8 "$HOME\bin\copilot-qwen.ps1"
-```
-
-### Mac（zsh / bash）
-
-```bash
-cat > ~/bin/copilot-qwen <<'EOF'
-#!/bin/zsh
-set -a
-source ~/.copilot/qwen.env
-set +a
-exec copilot
-EOF
-chmod +x ~/bin/copilot-qwen
-```
-
-### Linux（bash / zsh）
-
-```bash
-cat > ~/bin/copilot-qwen <<'EOF'
-#!/bin/bash
-set -a
-source ~/.copilot/qwen.env
-set +a
-exec copilot
-EOF
-chmod +x ~/bin/copilot-qwen
-```
-
----
-
-## 第 6 步：把脚本目录加入 PATH
+## 第 4 步：把脚本目录加入 PATH
 
 ### Windows（PowerShell）
 
@@ -278,7 +178,7 @@ source ~/.bashrc
 & "$HOME\bin\copilot-qwen.ps1"
 ```
 
-### Mac（zsh / bash）已验证
+### Mac（zsh / bash）
 
 ```bash
 copilot-deepseek
@@ -307,152 +207,3 @@ copilot-qwen
 
 - DeepSeek：`128000 / 4096`
 - Qwen：`1000000 / 65536`
-
----
-
-## 第 9 步：最终建议
-
-1. 不要把 API Key 写进脚本
-2. `.env` 只保存环境变量
-3. 两套模型用两个独立脚本
-4. 修改 `.env` 后重开终端再测试
-5. 如果 Key 可能泄露，尽快重新生成
-
----
-
-## 结论
-
-这套方案的核心就是：
-
-- 用 `.env` 保存两套配置
-- 用两个启动脚本分别加载
-- 用 `PATH` 让脚本可直接执行
-- 用两个终端切换或同时运行
-
-这样就能在 Windows、Mac、Linux 上都用同样的思路把 DeepSeek 和 Qwen 配好。
-
----
-
-## 可选扩展：本地 token / 额度监控原型
-
-仓库里现在额外提供了一个**独立原型**：`usage-monitor-web/`
-
-这个原型的目标是：
-
-- 不改现有 `copilot-deepseek` / `copilot-qwen` 的使用方式
-- 不接管真实请求转发
-- 先单独轮询 provider 的 usage / billing / quota 接口
-- 在本地网页里展示 token、累计消耗、额度余额等信息
-- Qwen 侧优先走百炼控制台页面抓取；登录态不足时可在本地配置里补 Cookie 或改接内部数据源
-
-### 适合什么场景
-
-如果你已经完成了 DeepSeek / Qwen 的接入，现在想继续验证：
-
-- 平台是否提供可用的 usage / billing API
-- 能否先做出一个不会影响现有部署流程的监控工具
-
-那么可以先试这个原型。
-
-### 启动方式
-
-```powershell
-Set-Location .\usage-monitor-web
-npm start
-```
-
-默认访问：
-
-```text
-http://127.0.0.1:4173
-```
-
-### 配置方式
-
-保留你现有的：
-
-- `~/.copilot/deepseek.env`
-- `~/.copilot/qwen.env`
-
-然后复制示例配置：
-
-```powershell
-Copy-Item .\config\providers.example.json .\config\providers.local.json
-```
-
-再按 provider 文档填写：
-
-- `usageApi.url`
-- `balanceApi.url`
-- `parser.*Path`
-
-> 说明：`providers.local.json` 已加入 `.gitignore`，适合保留本地私有接口配置，不会影响仓库当前已有的 API 配置教程。
-
----
-
-## 附录：DeepSeek Usage 网页监控配置教程（usage-monitor-web）
-
-如果你要让 `usage-monitor-web` 正常读取 DeepSeek 网页 usage 数据（按月请求/Token 柱图），请按下面配置。
-
-### 1. 准备 `~/.copilot/deepseek.env`
-
-至少包含：
-
-```env
-COPILOT_PROVIDER_BASE_URL=https://api.deepseek.com/v1
-COPILOT_PROVIDER_API_KEY=你的DeepSeek API Key
-COPILOT_MODEL=deepseek-reasoner
-COPILOT_DEEPSEEK_COOKIE=你的网页登录Cookie
-COPILOT_DEEPSEEK_WEB_TOKEN=你的网页Bearer Token（不含 Bearer 前缀）
-```
-
-> 说明：DeepSeek usage 网页接口通常需要 **Cookie + Bearer Token** 双鉴权。
-
-### 2. 如何拿到 `COPILOT_DEEPSEEK_COOKIE`
-
-1. 浏览器打开并登录：`https://platform.deepseek.com/usage`
-2. 按 `F12` 打开开发者工具，进入 `Network`
-3. 任选一个同域请求（如 `get_user_summary`），在 `Request Headers` 找到 `Cookie`
-4. 复制整段 Cookie 值，写入：
-   - `COPILOT_DEEPSEEK_COOKIE=...`
-
-> 小技巧：也可以在浏览器 `Application/Storage -> Cookies -> https://platform.deepseek.com` 中复制拼接。
-
-### 3. 如何拿到 `COPILOT_DEEPSEEK_WEB_TOKEN`
-
-1. 浏览器打开并登录：`https://platform.deepseek.com/usage`
-2. 按 `F12` 打开开发者工具，进入 `Network`
-3. 点击任一请求（如 `get_user_summary` / `usage/amount` / `usage/cost`）
-4. 在 `Request Headers` 找到：
-   - `Authorization: Bearer xxxxx`
-5. 把 `xxxxx` 写到 `COPILOT_DEEPSEEK_WEB_TOKEN`
-
-### 4. 启动监控面板
-
-```powershell
-Set-Location .\usage-monitor-web
-npm start
-```
-
-打开：
-
-```text
-http://127.0.0.1:4173
-```
-
-### 5. 正常状态判断
-
-- DeepSeek 卡片 `Usage API` 状态为 `ok`
-- 页面显示本月完整日期（如 4/1~4/30）的请求数与 Token 柱图
-- 顶部显示：`Base URL / Env文件 / Usage来源 / 数据抓取时间`
-
-### 6. 常见问题
-
-- 显示 `Usage API 需要登录态`：检查 Cookie 是否过期、`COPILOT_DEEPSEEK_WEB_TOKEN` 是否为空或失效
-- 显示 `Authorization Failed` / `Missing Token`：通常是 Bearer Token 不正确或已过期
-- 修改 `.env` 后无变化：重启 `usage-monitor-web`
-
----
-# `copilot-instructions.md` 模板说明
-
-在本仓库的 `init-template/copilot-instructions.md` 中，我们提供了一个针对 GitHub Copilot CLI 的使用说明模板。这个模板包含了 Plan 模式和 Autopilot 模式的约束，以及 `/doc/plan.md` 的固定结构要求。在初始化新的仓库时，可以参考这个模板来创建 `.github/copilot-instructions.md` 文件，并根据实际需求进行调整和完善。
