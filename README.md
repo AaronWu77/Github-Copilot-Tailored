@@ -87,6 +87,7 @@ EOF
 - `COPILOT_MODEL=deepseek-v4-flash(pro)/qwen3.6-plus`：模型选择
 - `COPILOT_PROVIDER_MAX_PROMPT_TOKENS=256000`：上下文 256K
 - `COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=4096`：输出最大 4K
+- `COPILOT_PROVIDER_REQUEST_BODY_PARAMS={"thinking":{"type":"enabled"}}`: 从deepseek-v4开始必须要给出thinking模式，可以在脚本中添加如下内容
 
 > 如果 Copilot 提示 `Model ... is not in the built-in catalog`，通常不是错误，只是 Copilot 不认识这个模型名，不能自动推断 token 上限；手动配置即可。
 
